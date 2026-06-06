@@ -11,10 +11,11 @@ import StatCard         from '@/components/ui/StatCard'
 import FiltroTemporal   from '@/components/ui/FiltroTemporal'
 import PieCategoria     from '@/components/charts/PieCategoria'
 import BarTemporal      from '@/components/charts/BarTemporal'
+import PieEstatus       from '@/components/charts/PieEstatus'
+import ChartDeltaBacklog from '@/components/charts/ChartDeltaBacklog' // <-- IMPORTACIÓN NUEVA
 import { useReportes }  from '@/hooks/useReportes'
 import { useMunicipio } from '@/contexts/MunicipioContext'
 import { CATEGORIAS }   from '@/config/categorias'
-import PieEstatus       from '@/components/charts/PieEstatus'
 
 
 export default function Dashboard() {
@@ -37,9 +38,9 @@ export default function Dashboard() {
     return { total: reportes.length, porCategoria, porEstatus }
   }, [reportes, loading])
 
-  const nuevos     = porEstatus['Nuevo']      ?? 0
-  const enProceso  = porEstatus['En proceso'] ?? 0
-  const resueltos  = porEstatus['Resuelto']   ?? 0
+  const nuevos      = porEstatus['Nuevo']      ?? 0
+  const enProceso   = porEstatus['En proceso'] ?? 0
+  const resueltos   = porEstatus['Resuelto']   ?? 0
   const pctResuelto = total > 0 ? Math.round((resueltos / total) * 100) : 0
 
   const diasFiltro = { dia: 1, semana: 7, mes: 30, anio: 365, todos: 30 }
@@ -49,18 +50,11 @@ export default function Dashboard() {
 
     CATEGORIAS.forEach(cat => {
       const filtrados = reportes.filter(r => r.categoria === cat.firestoreValue)
-
-      const estatus = {
-        Nuevo: 0,
-        'En proceso': 0,
-        Resuelto: 0
-      }
-
+      const estatus = { Nuevo: 0, 'En proceso': 0, Resuelto: 0 }
       filtrados.forEach(r => {
         const e = r.estatus || 'Nuevo'
         estatus[e] = (estatus[e] || 0) + 1
       })
-
       resultado[cat.firestoreValue] = estatus
     })
 
@@ -94,9 +88,8 @@ export default function Dashboard() {
         ))}
       </Grid>
 
-      {/* Gráficas principales */}
+      {/* Gráficas principales originales */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        {/* Donut por categoría */}
         <Grid item xs={12} md={5}>
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ p: 2.5 }}>
@@ -113,30 +106,44 @@ export default function Dashboard() {
           </Card>
         </Grid>
 
-        {/* Barras temporales */}
         <Grid item xs={12} md={7}>
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ p: 2.5 }}>
               <Typography variant="h6" fontWeight={600} mb={0.5}>
-                Tendencia de reportes
+                Tendencia de nuevos reportes
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Cantidad de reportes recibidos por día
+                Cantidad de incidencias reportadas por día
               </Typography>
               <Box sx={{ mt: 2 }}>
-                <BarTemporal
-                  reportes={reportes}
-                  dias={diasFiltro[filtro] ?? 30}
-                  loading={loading}
-                  height={240}
-                />
+                <BarTemporal reportes={reportes} dias={diasFiltro[filtro] ?? 30} loading={loading} height={240} />
               </Box>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* Tabla de categorías con conteos */}
+      {/* NUEVA SECCIÓN: Gráfico de Delta / Backlog */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Typography variant="h6" fontWeight={600} mb={0.5}>
+            Balance de Gestión (Backlog)
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Relación diaria de reportes entrantes (Nuevos) vs salientes (Resueltos). Un Delta por encima de cero significa que se resolvieron más reportes de los que se recibieron.
+          </Typography>
+          <Box sx={{ mt: 3 }}>
+            <ChartDeltaBacklog
+              reportes={reportes}
+              dias={diasFiltro[filtro] ?? 30}
+              loading={loading}
+              height={320}
+            />
+          </Box>
+        </CardContent>
+      </Card>
+
+      {/* Resto del Dashboard: Tabla de categorías y Estatus por categoría */}
       <Card>
         <CardContent sx={{ p: 2.5 }}>
           <Typography variant="h6" fontWeight={600} mb={2}>
@@ -175,25 +182,19 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Gráficas por categoría */}
+      {/* Gráficas de Estatus por Categoría */}
       <Card sx={{ mt: 3 }}>
         <CardContent sx={{ p: 2.5 }}>
           <Typography variant="h6" fontWeight={600} mb={0.5}>
             Estatus por categoría
           </Typography>
-
           <Typography variant="caption" color="text.secondary">
             Distribución de estatus dentro de cada tipo de reporte
           </Typography>
-
           <Grid container spacing={2} sx={{ mt: 1 }}>
             {CATEGORIAS.map(cat => {
               const data = estatusPorCategoria[cat.firestoreValue] || {}
-
-              const totalCat =
-                (data['Nuevo'] || 0) +
-                (data['En proceso'] || 0) +
-                (data['Resuelto'] || 0)
+              const totalCat = (data['Nuevo'] || 0) + (data['En proceso'] || 0) + (data['Resuelto'] || 0)
 
               if (totalCat === 0) return null
 
@@ -204,13 +205,8 @@ export default function Dashboard() {
                       <Typography variant="body2" fontWeight={600}>
                         {cat.emoji} {cat.label}
                       </Typography>
-
                       <Box sx={{ mt: 1 }}>
-                        <PieEstatus
-                          data={data}
-                          loading={loading}
-                          height={180}
-                        />
+                        <PieEstatus data={data} loading={loading} height={180} />
                       </Box>
                     </CardContent>
                   </Card>

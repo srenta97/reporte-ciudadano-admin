@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  sendPasswordResetEmail,
 } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '@/config/firebase'
@@ -49,10 +50,14 @@ export function AuthProvider({ children }) {
   const esAdmin    = perfil?.rol === 'admin'
   const esOperador = perfil?.rol === 'admin' || perfil?.rol === 'operador'
 
+  const resetPassword = (email) => {
+    return sendPasswordResetEmail(auth, email)
+  }
+
   return (
     <AuthContext.Provider value={{
       user, perfil, loading,
-      login, logout,
+      login, logout, resetPassword,
       esAdmin, esOperador,
     }}>
       {!loading && children}

@@ -1,3 +1,4 @@
+// src/components/tickets/OrdenesTrabajo.jsx
 import React, { useState, useMemo } from 'react'
 import {
   Box, Card, CardContent, Typography, Stack, Chip,
@@ -347,6 +348,10 @@ export default function OrdenesTrabajo() {
   const { municipio } = useMunicipio()
   const { user, perfil } = useAuth()
 
+  // --- SOLUCIÓN APLICADA: Capturar el ID de usuario de forma segura ---
+  // Busca el uid de Auth, y si no está listo, utiliza el ID que viene de la colección del perfil
+  const currentUserId = user?.uid || perfil?.id || perfil?.uid
+
   const [filtroTiempo, setFiltroTiempo] = useState('todos')
   const [vista, setVista] = useState('kanban')
   const [soloMios, setSoloMios] = useState(false)
@@ -401,7 +406,7 @@ export default function OrdenesTrabajo() {
   const cambiarEstatus = async (reporteId, nuevoEstatus) => {
     await originalCambiarEstatus(reporteId, nuevoEstatus)
     const reporteActual = reportes.find(r => r.id === reporteId)
-    if (reporteActual?.asignado_a && reporteActual.asignado_a !== user?.uid) {
+    if (reporteActual?.asignado_a && reporteActual.asignado_a !== currentUserId) {
       await crearNotificacion({
         usuario_destino_id: reporteActual.asignado_a,
         titulo: 'Estatus actualizado',
@@ -415,7 +420,7 @@ export default function OrdenesTrabajo() {
   const agregarNota = async (reporteId, notaText) => {
     await originalAgregarNota(reporteId, notaText)
     const reporteActual = reportes.find(r => r.id === reporteId)
-    if (reporteActual?.asignado_a && reporteActual.asignado_a !== user?.uid) {
+    if (reporteActual?.asignado_a && reporteActual.asignado_a !== currentUserId) {
       await crearNotificacion({
         usuario_destino_id: reporteActual.asignado_a,
         titulo: `Nueva nota en ticket #${reporteActual.folio || ''}`,
@@ -429,7 +434,7 @@ export default function OrdenesTrabajo() {
   const cambiarPrioridad = async (reporteId, nuevaPrioridad) => {
     await originalCambiarPrioridad(reporteId, nuevaPrioridad)
     const reporteActual = reportes.find(r => r.id === reporteId)
-    if (reporteActual?.asignado_a && reporteActual.asignado_a !== user?.uid) {
+    if (reporteActual?.asignado_a && reporteActual.asignado_a !== currentUserId) {
       await crearNotificacion({
         usuario_destino_id: reporteActual.asignado_a,
         titulo: 'Cambio de prioridad',
@@ -442,7 +447,8 @@ export default function OrdenesTrabajo() {
 
   const reportesFiltrados = useMemo(() => {
     let r = reportes
-    if (soloMios) r = r.filter(x => x.asignado_a === user?.uid)
+    // Usamos el ID seguro `currentUserId` en lugar de `user?.uid`
+    if (soloMios) r = r.filter(x => x.asignado_a === currentUserId)
     if (filtroCat) r = r.filter(x => x.categoria === filtroCat)
     if (filtroPrio) r = r.filter(x => x.prioridad === filtroPrio)
     if (busqueda) {
@@ -455,7 +461,7 @@ export default function OrdenesTrabajo() {
       )
     }
     return r
-  }, [reportes, soloMios, filtroCat, filtroPrio, busqueda, user])
+  }, [reportes, soloMios, filtroCat, filtroPrio, busqueda, currentUserId])
 
   const porColumna = useMemo(() => {
     return Object.fromEntries(
@@ -466,7 +472,12 @@ export default function OrdenesTrabajo() {
     )
   }, [reportesFiltrados])
 
-  const misAsignados = reportes.filter(r => r.asignado_a === user?.uid && !['Resuelto', 'No aplica', 'Rechazado'].includes(r.estatus ?? 'Nuevo')).length
+  // Ajustado también el conteo de la tarjeta de "Mis asignados"
+  const misAsignados = reportes.filter(r => 
+    r.asignado_a === currentUserId && 
+    !['Resuelto', 'No aplica', 'Rechazado'].includes(r.estatus ?? 'Nuevo')
+  ).length
+  
   const nuevos = reportes.filter(r => (r.estatus ?? 'Nuevo') === 'Nuevo').length
   const enProceso = reportes.filter(r => r.estatus === 'En proceso').length
   const resueltosHoy = reportes.filter(r => {
