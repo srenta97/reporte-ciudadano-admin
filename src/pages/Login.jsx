@@ -2,7 +2,7 @@
 import React, { useState } from 'react'
 import {
   Box, Card, CardContent, TextField, Button, Typography,
-  InputAdornment, IconButton, Alert, CircularProgress,
+  InputAdornment, IconButton, Alert, CircularProgress, Link
 } from '@mui/material'
 import EmailIcon        from '@mui/icons-material/EmailOutlined'
 import LockIcon         from '@mui/icons-material/LockOutlined'
@@ -11,7 +11,7 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import BusinessIcon     from '@mui/icons-material/Business'
 import { useAuth }      from '@/contexts/AuthContext'
 import { useMunicipio } from '@/contexts/MunicipioContext'
-import { useNavigate }  from 'react-router-dom'
+import { useNavigate, Link as RouterLink }  from 'react-router-dom'
 
 export default function Login() {
   const { login }     = useAuth()
@@ -140,6 +140,21 @@ export default function Login() {
                   ),
                 }}
               />
+
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: -1 }}>
+                <Link
+                  component={RouterLink}
+                  to="/recuperar-password"
+                  variant="body2"
+                  underline="hover"
+                  sx={{ 
+                    color: municipio.brandColor,
+                    fontWeight: 500
+                  }}
+                >
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </Box>
 
               <Button
                 type="submit"

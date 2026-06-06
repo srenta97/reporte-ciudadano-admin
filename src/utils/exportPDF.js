@@ -21,6 +21,22 @@ function safeDate(r, soloFecha = false) {
   } catch { return r.fecha_legible ?? '—' }
 }
 
+// ── Helper para descargar imagen y convertirla a Base64 (Requerido para PDF) ──
+const fetchImageToBase64 = async (url) => {
+  try {
+    const response = await fetch(url)
+    const blob = await response.blob()
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result)
+      reader.readAsDataURL(blob)
+    })
+  } catch (error) {
+    console.warn('No se pudo cargar la imagen para el PDF:', error)
+    return null
+  }
+}
+
 function headerPDF(doc, titulo, subtitulo, municipio) {
   const [r, g, b] = hexToRgbArr(municipio?.brandColor ?? BRAND)
   doc.setFillColor(r, g, b)
@@ -56,7 +72,7 @@ function footerPDF(doc, municipio) {
   }
 }
 
-// ── 1. Reporte general — ACTUALIZADO: +Prioridad, +Asignado a ──
+// ── 1. Reporte general ───────────────────────────────────────
 export function exportarReporteGeneral(reportes, filtros, municipio) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const periodo = filtros.periodo ?? 'Todos los períodos'
@@ -106,7 +122,7 @@ export function exportarReporteGeneral(reportes, filtros, municipio) {
   doc.save(`reporte_general_${format(new Date(),'yyyyMMdd_HHmm')}.pdf`)
 }
 
-// ── 2. Resumen por categoría (sin cambios) ────────────────────
+// ── 2. Resumen por categoría ─────────────────────────────────
 export function exportarResumenCategorias(porCategoria, total, filtros, municipio) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   headerPDF(doc, 'Resumen por Categoría',
@@ -129,7 +145,7 @@ export function exportarResumenCategorias(porCategoria, total, filtros, municipi
   doc.save(`resumen_categorias_${format(new Date(),'yyyyMMdd_HHmm')}.pdf`)
 }
 
-// ── 3. Pendientes — ACTUALIZADO: +Prioridad, +Asignado a ─────
+// ── 3. Pendientes ────────────────────────────────────────────
 export function exportarPendientes(reportes, municipio) {
   const pendientes = reportes.filter(r => ['Nuevo','En proceso'].includes(r.estatus ?? 'Nuevo'))
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
@@ -174,7 +190,7 @@ export function exportarPendientes(reportes, municipio) {
   doc.save(`pendientes_${format(new Date(),'yyyyMMdd_HHmm')}.pdf`)
 }
 
-// ── 4. Mensual — ACTUALIZADO: +Prioridad en detalle ──────────
+// ── 4. Mensual ───────────────────────────────────────────────
 export function exportarMensual(reportes, anio, mes, municipio) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const nombreMes = format(new Date(anio, mes - 1, 1), 'MMMM yyyy', { locale: es })
@@ -224,9 +240,7 @@ export function exportarMensual(reportes, anio, mes, municipio) {
   doc.save(`informe_mensual_${anio}_${String(mes).padStart(2,'0')}_${format(new Date(),'HHmm')}.pdf`)
 }
 
-// ── 5. NUEVA: Órdenes de trabajo activas ─────────────────────
-// Pensado para operadores: lista todas las órdenes activas
-// ordenadas por prioridad, con conteo de notas y días abierto.
+// ── 5. Órdenes de trabajo activas ────────────────────────────
 export function exportarOrdenesTrabajo(reportes, municipio) {
   const activos = reportes.filter(r =>
     !['Resuelto','No aplica','Rechazado'].includes(r.estatus ?? 'Nuevo')
@@ -284,9 +298,7 @@ export function exportarOrdenesTrabajo(reportes, municipio) {
   doc.save(`ordenes_trabajo_${format(new Date(),'yyyyMMdd_HHmm')}.pdf`)
 }
 
-// ── 6. NUEVA: Historial de actividad de un reporte ────────────
-// Exporta el timeline completo de notas, cambios de estatus
-// y asignaciones de un reporte individual.
+// ── 6. Historial de actividad de un reporte ──────────────────
 export function exportarHistorialReporte(reporte, municipio) {
   const doc  = new jsPDF({ unit: 'mm', format: 'a4' })
   const cat  = CATEGORIA_MAP[reporte.categoria]
@@ -350,4 +362,92 @@ export function exportarHistorialReporte(reporte, municipio) {
 
   footerPDF(doc, municipio)
   doc.save(`historial_${reporte.folio ?? 'reporte'}_${format(new Date(),'yyyyMMdd')}.pdf`)
+}
+
+// ── 7. NUEVA: Ficha Individual para Trabajo en Campo ─────────
+export async function exportarFichaIndividual(reporte, municipio) {
+  const doc  = new jsPDF({ unit: 'mm', format: 'a4' })
+  const cat  = CATEGORIA_MAP[reporte.categoria]
+
+  // Usamos el encabezado estandarizado
+  headerPDF(doc,
+    `Ficha de Orden de Trabajo — ${reporte.folio ?? 'S/N'}`,
+    `${cat ? `${cat.emoji} ${cat.label}` : reporte.categoria ?? '—'} · ${reporte.ubicacion ?? '—'}`,
+    municipio
+  )
+
+  // Tabla con los datos ciudadanos e internos
+  autoTable(doc, {
+    startY: 36,
+    head: [['Dato', 'Detalle de la Incidencia']],
+    body: [
+      ['Folio del Reporte', reporte.folio ?? '—'],
+      ['Categoría', reporte.categoria ?? '—'],
+      ['Problema / Subtipo', reporte.subtipo ?? '—'],
+      ['Prioridad Asignada', reporte.prioridad ? (PRIORIDAD_MAP[reporte.prioridad]?.label ?? '—') : 'Sin definir'],
+      ['Estatus Actual', reporte.estatus ?? 'Nuevo'],
+      ['Fecha de Creación', safeDate(reporte)],
+      ['Ubicación Exacta', reporte.ubicacion ?? '—'],
+      ['Teléfono del Ciudadano', reporte.telefono ?? 'No proporcionado'],
+      ['Operador Asignado', reporte.asignado_nombre ?? 'Sin asignar'],
+    ],
+    styles: { fontSize: 10, cellPadding: 3 },
+    headStyles: { fillColor: hexToRgbArr(municipio?.brandColor ?? BRAND), textColor: [255,255,255] },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } },
+  })
+
+  // Historial de actividad
+  const actividad = [...(reporte.actividad ?? [])].sort((a, b) => {
+    const ta = a.fecha?.toDate?.()?.getTime() ?? 0
+    const tb = b.fecha?.toDate?.()?.getTime() ?? 0
+    return ta - tb
+  })
+
+  let finalY = doc.lastAutoTable.finalY + 10
+
+  if (actividad.length > 0) {
+    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(50,50,50)
+    doc.text(`Historial y Notas de Atención`, 14, finalY)
+
+    autoTable(doc, {
+      startY: finalY + 4,
+      head: [['Fecha y hora', 'Autor', 'Acción', 'Descripción']],
+      body: actividad.map(a => {
+        let fecha = '—'
+        try {
+          const d = a.fecha?.toDate ? a.fecha.toDate() : new Date(a.fecha)
+          fecha = format(d, "dd/MM/yyyy HH:mm", { locale: es })
+        } catch {}
+        return [fecha, a.autorNombre ?? 'Sistema', a.tipo ?? 'nota', a.texto ?? '—']
+      }),
+      styles: { fontSize: 8.5, cellPadding: 2.5 },
+      headStyles: { fillColor: [100,116,139], textColor: [255,255,255] },
+      alternateRowStyles: { fillColor: [248,250,252] },
+      columnStyles: { 0: { cellWidth: 32 }, 1: { cellWidth: 35 }, 2: { cellWidth: 25 } },
+    })
+    finalY = doc.lastAutoTable.finalY + 10
+  }
+
+  // Descarga de la Foto (Si el reporte tiene una)
+  if (reporte.foto_url) {
+    // Verificar si la foto cabe en la página actual, de lo contrario, crear página nueva
+    if (finalY + 100 > doc.internal.pageSize.getHeight()) {
+      doc.addPage()
+      finalY = 20 // Reiniciamos el cursor vertical
+    }
+    
+    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(50,50,50)
+    doc.text('Evidencia fotográfica adjunta:', 14, finalY)
+    
+    const base64Img = await fetchImageToBase64(reporte.foto_url)
+    if (base64Img) {
+      doc.addImage(base64Img, 'JPEG', 14, finalY + 5, 100, 100, undefined, 'FAST')
+    } else {
+       doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(BRAND)
+       doc.textWithLink('No se pudo cargar la imagen en PDF. Clic aquí para ver en el navegador.', 14, finalY + 10, { url: reporte.foto_url })
+    }
+  }
+
+  footerPDF(doc, municipio)
+  doc.save(`Ficha_Reporte_${reporte.folio ?? 'SN'}.pdf`)
 }

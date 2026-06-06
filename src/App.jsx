@@ -13,6 +13,7 @@ import Usuarios              from '@/pages/Usuarios'
 import Reportes              from '@/pages/Reportes'
 import OrdenesTrabajo        from '@/pages/OrdenesTrabajo'
 import NuevoReporte          from '@/pages/NuevoReporte'
+import ForgotPassword        from '@/pages/ForgotPassword'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/recuperar-password" element={<ForgotPassword />} />
 
             <Route path="/" element={
               <ProtectedRoute>

@@ -17,8 +17,11 @@ import SwapHorizIcon     from '@mui/icons-material/SwapHoriz'
 import PersonIcon        from '@mui/icons-material/PersonOutline'
 import FlagIcon          from '@mui/icons-material/Flag'
 import OpenInNewIcon     from '@mui/icons-material/OpenInNew'
+import ContentPasteIcon  from '@mui/icons-material/ContentPaste'
+import PictureAsPdfIcon  from '@mui/icons-material/PictureAsPdf'
 import { format }        from 'date-fns'
 import { es }            from 'date-fns/locale'
+import { exportarFichaIndividual } from '@/utils/exportPDF'
 import { CATEGORIA_MAP, ESTATUS, ESTATUS_MAP } from '@/config/categorias'
 import { PRIORIDADES, PRIORIDAD_MAP }          from '@/hooks/useOrdenesTrabajo'
 import { useAuth }       from '@/contexts/AuthContext'
@@ -26,6 +29,16 @@ import { useMunicipio }  from '@/contexts/MunicipioContext'
 import { useUsuarios }   from '@/hooks/useUsuarios'
 
 const DRAWER_WIDTH = 480
+
+// ── Plantillas de respuestas rápidas ─────────────────────────
+const PLANTILLAS_RESPUESTA = [
+  "Se giró orden de trabajo al área correspondiente.",
+  "En espera de material para reparación.",
+  "El reporte ha sido canalizado a Obras Públicas.",
+  "Cuadrilla en camino al lugar del reporte.",
+  "Reporte atendido y solucionado satisfactoriamente.",
+  "Se requiere mayor información para proceder. Favor de contactar al ciudadano."
+]
 
 // ── Helpers visuales ──────────────────────────────────────────
 function EstatusChip({ value }) {
@@ -84,6 +97,7 @@ export default function TicketDetalle({
 
   const [nota,          setNota]          = useState('')
   const [guardandoNota, setGuardandoNota] = useState(false)
+  const [generandoPdf,  setGenerandoPdf]  = useState(false)
   const [estatusLocal,  setEstatusLocal]  = useState('')
   const [prioridadLocal,setPrioridadLocal]= useState('')
   const actividadRef = useRef(null)
@@ -142,6 +156,17 @@ export default function TicketDetalle({
     await onAsignar(reporte.id, uid || '', op?.nombre ?? '')
   }
 
+  const handleDescargarPdf = async () => {
+    setGenerandoPdf(true)
+    try {
+      await exportarFichaIndividual(reporte, municipio)
+    } catch (error) {
+      console.error("Error generando PDF", error)
+    } finally {
+      setGenerandoPdf(false)
+    }
+  }
+
   return (
     <Drawer
       anchor="right"
@@ -172,9 +197,21 @@ export default function TicketDetalle({
             <PrioridadChip value={prioridadLocal} />
           </Stack>
         </Box>
-        <IconButton onClick={onClose} sx={{ color: 'white', mt: -0.5 }}>
-          <CloseIcon />
-        </IconButton>
+        {/* Contenedor de los botones de acción del Header */}
+        <Box sx={{ display: 'flex', gap: 0.5, mt: -0.5 }}>
+          <Tooltip title="Descargar Ficha para Imprimir (PDF)">
+            <IconButton 
+              onClick={handleDescargarPdf} 
+              disabled={generandoPdf} 
+              sx={{ color: 'white' }}
+            >
+              {generandoPdf ? <CircularProgress size={20} color="inherit" /> : <PictureAsPdfIcon />}
+            </IconButton>
+          </Tooltip>
+          <IconButton onClick={onClose} sx={{ color: 'white' }}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
       </Box>
 
       {/* ── Cuerpo scrolleable ───────────────────────────── */}
@@ -359,6 +396,42 @@ export default function TicketDetalle({
         p: 2, borderTop: '1px solid', borderColor: 'divider',
         bgcolor: 'background.paper',
       }}>
+        {/* NUEVO: Menú de respuestas rápidas */}
+        <Box sx={{ mb: 1.5 }}>
+          <FormControl fullWidth size="small">
+            <Select
+              displayEmpty
+              value=""
+              onChange={(e) => {
+                if (e.target.value) {
+                  // Concatena el texto si ya había algo escrito
+                  setNota(prev => (prev ? prev + ' ' + e.target.value : e.target.value))
+                }
+              }}
+              sx={{ 
+                height: 36, 
+                fontSize: 13, 
+                bgcolor: 'action.hover', 
+                '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                '&:hover': { bgcolor: 'action.selected' }
+              }}
+            >
+              <MenuItem value="" disabled>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
+                  <ContentPasteIcon fontSize="small" /> 
+                  <Typography variant="body2">Insertar respuesta rápida...</Typography>
+                </Box>
+              </MenuItem>
+              {PLANTILLAS_RESPUESTA.map((texto, i) => (
+                <MenuItem key={i} value={texto} sx={{ fontSize: 13 }}>
+                  {texto}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+
+        {/* Caja de texto original */}
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
           <TextField
             value={nota}
