@@ -294,37 +294,39 @@ export default function BuscadorGlobal() {
       <Box
         onClick={abrir}
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1.5,
-          px: 2,
-          py: 1,
-          width: '100%',
-          maxWidth: 500, // Evita que crezca infinitamente en pantallas muy grandes
-          bgcolor: 'action.hover', // Un gris claro y sutil
-          borderRadius: 2,
-          cursor: 'pointer',
-          border: '1px solid',
-          borderColor: 'divider',
-          transition: 'background 0.2s',
-          '&:hover': { bgcolor: 'action.selected' },
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        px: 1.5,
+        py: 0.75,
+        width: '100%',
+        flexGrow: 1, 
+        minWidth: 0,
+        maxWidth: { xs: '100%', md: 450 }, 
+        bgcolor: 'action.hover',
+        borderRadius: 2,
+        cursor: 'pointer',
+        border: '1px solid',
+        borderColor: 'divider',
+        transition: 'background 0.2s',
+        '&:hover': { bgcolor: 'action.selected' },
         }}
-      >
+    >
         <SearchIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
         
         <Typography 
-          variant="body2" 
-          color="text.secondary" 
-          sx={{ 
+        variant="body2" 
+        color="text.secondary" 
+        sx={{ 
             flex: 1, 
             textAlign: 'left',
             overflow: 'hidden', 
             textOverflow: 'ellipsis', 
             whiteSpace: 'nowrap',
-            userSelect: 'none'
-          }}
+            display: 'block'
+        }}
         >
-          Buscar por folio (RCJ-00241) o teléfono...
+        Buscar por folio (RCJ-00241) o teléfono...
         </Typography>
 
         {/* Atajo de teclado visual (Se oculta en celulares para ahorrar espacio) */}

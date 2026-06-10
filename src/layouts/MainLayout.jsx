@@ -31,12 +31,12 @@ const DRAWER_WIDTH = 260
 
 const NAV_ITEMS = [
   { label: 'General',       icon: <DashboardIcon />,    path: '/dashboard',   rol: null },
-  { label: 'Nuevo reporte', icon: <AddBoxIcon />, path: '/nuevo-reporte', rol: 'operador' },
-  { label: 'Órdenes de trabajo', icon: <WorkIcon />, path: '/ordenes', rol: 'operador' },
-  { label: 'Gestión',         icon: <AssignmentIcon />,   path: '/gestion',     rol: 'admin' },
-  { label: 'Archivo',        icon: <DescriptionIcon />,  path: '/reportes',    rol: null },
-  { label: 'Mapa',            icon: <MapIcon />,          path: '/mapa',        rol: null },
-  { label: 'Usuarios',        icon: <PeopleIcon />,       path: '/usuarios',    rol: 'admin' },  
+  { label: 'Nuevo reporte', icon: <AddBoxIcon />,       path: '/nuevo-reporte', rol: 'operador' },
+  { label: 'Órdenes de trabajo', icon: <WorkIcon />,    path: '/ordenes',     rol: 'operador' },
+  { label: 'Gestión',       icon: <AssignmentIcon />,   path: '/gestion',     rol: 'admin' },
+  { label: 'Archivo',       icon: <DescriptionIcon />,  path: '/reportes',    rol: null },
+  { label: 'Mapa',          icon: <MapIcon />,          path: '/mapa',        rol: null },
+  { label: 'Usuarios',      icon: <PeopleIcon />,       path: '/usuarios',    rol: 'admin' },  
 ]
 
 export default function MainLayout() {
@@ -73,10 +73,19 @@ export default function MainLayout() {
         color: 'white',
       }}>
         <Box sx={{
-          width: 40, height: 40, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.2)',
+          width: 40, height: 40, borderRadius: 2, 
+          bgcolor: 'transparent',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden'
         }}>
-          <BusinessIcon sx={{ color: 'white', fontSize: 22 }} />
+          <img 
+            src="/img/logo-municipio.svg" 
+            alt="Logo Municipio" 
+            style={{ 
+              width: '100%',
+              height: '100%',
+            }} 
+          />
         </Box>
         <Box>
           <Typography variant="h6" sx={{ color: 'white', lineHeight: 1.2, fontWeight: 700 }}>
@@ -176,7 +185,7 @@ export default function MainLayout() {
     document.addEventListener('click', desbloquearAudio, { once: true });
 
     return () => document.removeEventListener('click', desbloquearAudio);
-  }, []); // <--- No olvides este arreglo vacío
+  }, []); 
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -209,22 +218,36 @@ export default function MainLayout() {
             color: 'text.primary',
           }}
         >
-          <Toolbar sx={{ display: 'flex', alignItems: 'center', gap: 2, px: { xs: 1, sm: 2 } }}>
+          <Toolbar sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            flexWrap: 'nowrap', // <-- CORRECCIÓN: Evita que los elementos salten de línea
+            gap: { xs: 1, sm: 2 }, 
+            px: { xs: 1, sm: 2 } 
+          }}>
             {/* SECCIÓN IZQUIERDA: Menú hamburguesa */}
-            <IconButton onClick={() => setOpen(o => !o)} edge="start">
+            <IconButton onClick={() => setOpen(o => !o)} edge="start" sx={{ flexShrink: 0 }}>
               <MenuIcon />
             </IconButton>
 
-            {/* SECCIÓN BUSCADOR: Pegado a la izquierda, al lado del menú */}
-            <Box sx={{ width: '100%', maxWidth: 450 }}>
+            {/* SECCIÓN BUSCADOR: Contenedor flexible */}
+            <Box sx={{ 
+              flex: 1, 
+              minWidth: 0, // <-- CORRECCIÓN: Permite que el buscador se encoja
+              display: 'flex', 
+              alignItems: 'center' 
+            }}>
               <BuscadorGlobal /> 
             </Box>
 
-            {/* ESPACIADOR: Este Box invisible crece para empujar los íconos a la derecha */}
-            <Box sx={{ flex: 1 }} />
-
             {/* SECCIÓN DERECHA: Notificaciones y Perfil */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: { xs: 0.5, sm: 1 }, 
+              flexShrink: 0, // <-- CORRECCIÓN: Evita que los iconos se aplasten
+              ml: 'auto' 
+            }}>
               <Tooltip title="Notificaciones">
                 <IconButton color="inherit" onClick={(e) => setAnchorElNotif(e.currentTarget)}>
                   <Badge badgeContent={noLeidasCount} color="error">
@@ -245,7 +268,7 @@ export default function MainLayout() {
               </IconButton>
             </Box>
 
-            {/* Aquí van los Popovers y Modales que ya tenías (NotificationsPopover, TicketDetalle, UserProfilePopover) */}
+            {/* Popovers y Modales */}
             <NotificationsPopover
               anchorEl={anchorElNotif}
               open={Boolean(anchorElNotif)}
@@ -253,6 +276,7 @@ export default function MainLayout() {
               notificaciones={notificaciones}
               municipio={municipio}
               onMarcarLeida={marcarTodasComoLeidas}
+              onVerTodas={() => navigate('/notificaciones')}
               onClicNotificacion={async (notif) => {
                 marcarComoLeida(notif.id);
                 setAnchorElNotif(null);
@@ -287,7 +311,7 @@ export default function MainLayout() {
               user={user}
               perfil={perfil}
               municipio={municipio}
-              onEdit={() => console.log("Ir a editar")}
+              onEdit={() => navigate('/editar-perfil')}
               onLogout={logout}
             />
           </Toolbar>

@@ -9,13 +9,28 @@ export const CATEGORIAS = [
     id:      'lamparas',
     label:   'Lámparas',
     emoji:   '💡',
-    // Color del marcador en el mapa
     color:   '#F59E0B',   // amber
-    // Color del chip/badge en tablas
     chipBg:  '#FEF3C7',
     chipTxt: '#92400E',
-    // Coincide exactamente con el valor guardado en Firestore por el bot
     firestoreValue: 'Lámparas',
+  },
+  {
+    id:      'agua_potable',
+    label:   'Agua Potable',
+    emoji:   '🚰',
+    color:   '#06B6D4',   // cyan
+    chipBg:  '#CFFAFE',
+    chipTxt: '#155E75',
+    firestoreValue: 'Agua Potable',
+  },
+  {
+    id:      'drenaje',
+    label:   'Drenaje y Aguas Negras',
+    emoji:   '🚱',
+    color:   '#14B8A6',   // teal
+    chipBg:  '#CCFBF1',
+    chipTxt: '#115E59',
+    firestoreValue: 'Drenaje y Aguas Negras',
   },
   {
     id:      'basura',
@@ -99,6 +114,46 @@ export const CATEGORIAS = [
     firestoreValue: 'Otro',
   },
 ]
+
+// ── Subtipos integrados ──────────────────────────────────────
+export const SUBTIPOS = {
+  'Lámparas': [
+    'No enciende', 'Parpadea', 'Encendida todo el día', 'Poste dañado', 'Falta luminaria', 'Otro'
+  ],
+  'Agua Potable': [
+    'Fuga de agua en calle', 'Fuga de agua en banqueta', 'Falta de suministro', 'Baja presión de agua', 'Otro'
+  ],
+  'Drenaje y Aguas Negras': [
+    'Fuga de aguas negras', 'Drenaje colapsado / tapado', 'Alcantarilla sin tapa', 'Alcantarilla hundida', 'Malos olores', 'Otro'
+  ],
+  'Basura': [
+    'Basura acumulada en vía pública', 'Contenedor desbordado', 'Quema de basura', 'Falta de recolección en ruta', 'Otro'
+  ],
+  'Baches': [
+    'Bache profundo', 'Grieta en pavimento', 'Hundimiento o socavón', 'Falta de balizamiento / pintura', 'Otro'
+  ],
+  'Ruido excesivo': [
+    'Música a alto volumen (Vecinos)', 'Ruido de negocio / bar / taller', 'Construcción fuera de horario', 'Mascotas ruidosas', 'Otro'
+  ],
+  'Retiro de objetos en vía pública': [
+    'Escombros o materiales de construcción', 'Muebles o cacharros abandonados', 'Apartalugares (cubetas, llantas, etc.)', 'Puesto ambulante obstruyendo', 'Otro'
+  ],
+  'Inspección a negocios/comercios': [
+    'Operando fuera de horario permitido', 'Invasión de banqueta con mercancía', 'Falta de medidas de seguridad / higiene', 'Venta de alcohol sin permiso (clandestino)', 'Otro'
+  ],
+  'Animales': [
+    'Perro / gato agresivo o suelto', 'Animal muerto en vía pública', 'Maltrato animal', 'Animal de granja en zona urbana', 'Otro'
+  ],
+  'Autos mal estacionados': [
+    'Obstruyendo cochera', 'Estacionado sobre la banqueta', 'Estacionado en lugar para discapacitados', 'Estacionado en doble fila', 'Vehículo abandonado (chatarra)', 'Otro'
+  ],
+  'Arbolado': [
+    'Árbol caído', 'Ramas peligrosas tocando cables', 'Árbol seco / en riesgo de caer', 'Raíces dañando banqueta / tubería', 'Poda excesiva no autorizada', 'Otro'
+  ],
+  'Otro': [
+    'Vandalismo / Grafiti', 'Falla en semáforo', 'Daño a mobiliario urbano (bancas, parques)', 'Otro problema'
+  ],
+}
 
 // Lookup rápido por firestoreValue → categoría
 export const CATEGORIA_MAP = Object.fromEntries(

@@ -1,3 +1,4 @@
+// src/pages/NotificationsPopover.jsx
 import React from 'react';
 import {
   Box, Typography, Divider, Button, Popover, Stack, 
