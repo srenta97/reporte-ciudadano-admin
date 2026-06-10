@@ -31,6 +31,7 @@ import TicketDetalle from '@/components/tickets/TicketDetalle'
 import FiltroTemporal from '@/components/ui/FiltroTemporal'
 import { useCrearNotificacion } from '@/hooks/useCrearNotificacion'
 import { useSearchParams } from 'react-router-dom'
+import { useUsuarios } from '@/hooks/useUsuarios' // <-- Nuevo hook importado
 
 function MiniStat({ label, value, color, icon, loading, subtitle }) {
   return (
@@ -347,14 +348,21 @@ export default function OrdenesTrabajo() {
 
   const { municipio } = useMunicipio()
   const { user, perfil } = useAuth()
+  
+  // Obtenemos a los usuarios para el filtro dinámico
+  const { usuarios } = useUsuarios()
+  const operadores = useMemo(() => {
+    return (usuarios || []).filter(u => ['operador', 'admin'].includes(u.rol) && u.activo !== false)
+  }, [usuarios])
 
-  // --- SOLUCIÓN APLICADA: Capturar el ID de usuario de forma segura ---
-  // Busca el uid de Auth, y si no está listo, utiliza el ID que viene de la colección del perfil
   const currentUserId = user?.uid || perfil?.id || perfil?.uid
 
   const [filtroTiempo, setFiltroTiempo] = useState('todos')
   const [vista, setVista] = useState('kanban')
-  const [soloMios, setSoloMios] = useState(false)
+  
+  // Reemplazamos "soloMios" por un filtro más robusto
+  const [filtroAsignado, setFiltroAsignado] = useState('') 
+  
   const [busqueda, setBusqueda] = useState('')
   const [filtroCat, setFiltroCat] = useState('')
   const [filtroPrio, setFiltroPrio] = useState('')
@@ -445,10 +453,16 @@ export default function OrdenesTrabajo() {
     }
   }
 
+  // Lógica principal de filtrado de datos combinada
   const reportesFiltrados = useMemo(() => {
     let r = reportes
-    // Usamos el ID seguro `currentUserId` en lugar de `user?.uid`
-    if (soloMios) r = r.filter(x => x.asignado_a === currentUserId)
+    
+    if (filtroAsignado === 'unassigned') {
+      r = r.filter(x => !x.asignado_a || x.asignado_a === '')
+    } else if (filtroAsignado) {
+      r = r.filter(x => x.asignado_a === filtroAsignado)
+    }
+    
     if (filtroCat) r = r.filter(x => x.categoria === filtroCat)
     if (filtroPrio) r = r.filter(x => x.prioridad === filtroPrio)
     if (busqueda) {
@@ -461,7 +475,7 @@ export default function OrdenesTrabajo() {
       )
     }
     return r
-  }, [reportes, soloMios, filtroCat, filtroPrio, busqueda, currentUserId])
+  }, [reportes, filtroAsignado, filtroCat, filtroPrio, busqueda])
 
   const porColumna = useMemo(() => {
     return Object.fromEntries(
@@ -472,7 +486,6 @@ export default function OrdenesTrabajo() {
     )
   }, [reportesFiltrados])
 
-  // Ajustado también el conteo de la tarjeta de "Mis asignados"
   const misAsignados = reportes.filter(r => 
     r.asignado_a === currentUserId && 
     !['Resuelto', 'No aplica', 'Rechazado'].includes(r.estatus ?? 'Nuevo')
@@ -497,7 +510,7 @@ export default function OrdenesTrabajo() {
     }
   }, [reportes])
 
-  const hayFiltros = busqueda || filtroCat || filtroPrio || soloMios
+  const hayFiltros = busqueda || filtroCat || filtroPrio || filtroAsignado
 
   return (
     <Box
@@ -592,7 +605,7 @@ export default function OrdenesTrabajo() {
             <TextField
               value={busqueda}
               onChange={e => setBusqueda(e.target.value)}
-              placeholder="Buscar por folio, ubicación o teléfono"
+              placeholder="Buscar por folio o ubicación"
               size="small"
               sx={{ flex: { xs: '1 1 100%', md: 2 }, minWidth: 240 }}
               InputProps={{
@@ -631,17 +644,31 @@ export default function OrdenesTrabajo() {
               </Select>
             </FormControl>
 
+            {/* Nuevo filtro de Asignado A */}
+            <FormControl size="small" sx={{ flex: 1, minWidth: 160 }}>
+              <InputLabel>Asignado a</InputLabel>
+              <Select value={filtroAsignado} onChange={e => setFiltroAsignado(e.target.value)} label="Asignado a">
+                <MenuItem value="">Todos</MenuItem>
+                <MenuItem value="unassigned"><em>Sin asignar</em></MenuItem>
+                {operadores.map(op => (
+                  <MenuItem key={op.id} value={op.id}>
+                    {op.nombre}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
             <Button
               size="small"
-              variant={soloMios ? 'contained' : 'outlined'}
-              onClick={() => setSoloMios(v => !v)}
+              variant={filtroAsignado === currentUserId ? 'contained' : 'outlined'}
+              onClick={() => setFiltroAsignado(filtroAsignado === currentUserId ? '' : currentUserId)}
               sx={{
                 textTransform: 'none',
                 borderRadius: 2,
                 whiteSpace: 'nowrap',
                 flex: { xs: '1 1 auto', md: 'initial' },
                 minHeight: 40,
-                ...(soloMios && {
+                ...(filtroAsignado === currentUserId && {
                   bgcolor: municipio.brandColor,
                   '&:hover': { bgcolor: municipio.brandColor, filter: 'brightness(1.08)' },
                 }),
@@ -657,7 +684,7 @@ export default function OrdenesTrabajo() {
                   setBusqueda('')
                   setFiltroCat('')
                   setFiltroPrio('')
-                  setSoloMios(false)
+                  setFiltroAsignado('')
                 }}
                 sx={{ textTransform: 'none', color: 'text.secondary', minHeight: 40 }}
               >

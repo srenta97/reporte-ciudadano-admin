@@ -23,7 +23,7 @@ import { useNavigate }    from 'react-router-dom'
 import { useMunicipio }   from '@/contexts/MunicipioContext'
 import { useAuth }        from '@/contexts/AuthContext'
 import { useUsuarios }    from '@/hooks/useUsuarios'
-import { CATEGORIAS, CATEGORIA_MAP } from '@/config/categorias'
+import { CATEGORIAS, CATEGORIA_MAP, SUBTIPOS } from '@/config/categorias'
 import { PRIORIDADES }    from '@/hooks/useOrdenesTrabajo'
 import { crearReporteManual, subirFoto } from '@/services/reportesService'
 
@@ -34,22 +34,6 @@ L.Icon.Default.mergeOptions({
   iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
-
-// Subtipos disponibles por categoría (extensible)
-const SUBTIPOS = {
-  'Lámparas': [
-    'No enciende', 'Parpadea', 'Encendida todo el día', 'Poste dañado', 'Otro',
-  ],
-  'Baches': [
-    'Bache profundo', 'Grieta en pavimento', 'Hundimiento', 'Otro',
-  ],
-  'Basura': [
-    'Basura acumulada', 'Contenedor desbordado', 'Quema de basura', 'Otro',
-  ],
-  'Arbolado': [
-    'Árbol caído', 'Ramas peligrosas', 'Árbol seco', 'Raíces dañando banqueta', 'Otro',
-  ],
-}
 
 // ── Selector de ubicación en el mapa ─────────────────────────
 function MapaSelector({ lat, lon, onChange, centro }) {

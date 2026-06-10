@@ -14,6 +14,7 @@ import Reportes              from '@/pages/Reportes'
 import OrdenesTrabajo        from '@/pages/OrdenesTrabajo'
 import NuevoReporte          from '@/pages/NuevoReporte'
 import ForgotPassword        from '@/pages/ForgotPassword'
+import EditarPerfil          from '@/pages/EditarPerfil';
 
 export default function App() {
   return (
@@ -53,6 +54,7 @@ export default function App() {
                   <NuevoReporte />
                 </ProtectedRoute>
               } />
+              <Route path="/editar-perfil" element={<EditarPerfil />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Route>
           </Routes>

@@ -1,3 +1,4 @@
+// src/pages/UserProfilePopover.jsx
 import React from 'react';
 import {
   Box, Typography, Divider, Button, Avatar, Popover, Stack, useTheme
