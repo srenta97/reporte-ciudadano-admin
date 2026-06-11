@@ -1,11 +1,11 @@
 // src/pages/Reportes.jsx
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   Box, Grid, Card, CardContent, Typography, Button, Stack,
   Divider, Chip, FormControl, InputLabel, Select, MenuItem,
   TextField, Alert, CircularProgress, Tooltip, Paper,
-  ToggleButtonGroup, ToggleButton, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  LinearProgress
 } from '@mui/material'
 import PictureAsPdfIcon  from '@mui/icons-material/PictureAsPdf'
 import TableChartIcon    from '@mui/icons-material/TableChart'
@@ -14,29 +14,36 @@ import AssessmentIcon    from '@mui/icons-material/Assessment'
 import PendingIcon       from '@mui/icons-material/HourglassEmpty'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import CategoryIcon      from '@mui/icons-material/Category'
+import RoomIcon          from '@mui/icons-material/Room' // Ícono para Sectores
+import EngineeringIcon   from '@mui/icons-material/Engineering' // Ícono para Operadores
+import AssignmentIcon    from '@mui/icons-material/Assignment'
+
 import { useReportes }   from '@/hooks/useReportes'
 import { useMunicipio }  from '@/contexts/MunicipioContext'
+import { useUsuarios }   from '@/hooks/useUsuarios' // Catálogo para nombres completos
 import { CATEGORIAS, CATEGORIA_MAP, ESTATUS_MAP } from '@/config/categorias'
-import { format, subDays, startOfMonth } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { format } from 'date-fns'
+
+// Firebase para cargar los sectores disponibles
+import { collection, getDocs } from 'firebase/firestore'
+import { db } from '@/config/firebase'
+
 import {
   exportarReporteGeneral, exportarResumenCategorias,
-  exportarPendientes, exportarMensual,
+  exportarPendientes, exportarMensual, exportarOrdenesTrabajo
 } from '@/utils/exportPDF'
+
 import {
   exportarExcelCompleto, exportarCSV,
-  exportarExcelPendientes, exportarExcelMensual,
+  exportarExcelPendientes, exportarExcelMensual, exportarExcelOrdenes
 } from '@/utils/exportExcel'
-import { exportarOrdenesTrabajo, exportarHistorialReporte } from '@/utils/exportPDF'
-import { exportarExcelOrdenes } from '@/utils/exportExcel'
-import AssignmentIcon from '@mui/icons-material/Assignment'
 
 // ── Tipos de reporte disponibles ─────────────────────────────
 const TIPOS_REPORTE = [
   {
     id: 'general',
     titulo: 'Reporte general',
-    desc: 'Todos los reportes con filtros de período, categoría y estatus.',
+    desc: 'Todos los reportes con filtros de período, categoría, estatus y sector.',
     icon: <AssessmentIcon />,
     color: '#1565C0',
     soporta: ['pdf','excel','csv'],
@@ -48,6 +55,22 @@ const TIPOS_REPORTE = [
     icon: <CategoryIcon />,
     color: '#7C3AED',
     soporta: ['pdf','excel'],
+  },
+  {
+    id: 'sectores',
+    titulo: 'Análisis por Zona / Sector',
+    desc: 'Distribución de reportes según los sectores geográficos configurados.',
+    icon: <RoomIcon />,
+    color: '#F59E0B',
+    soporta: ['excel', 'csv'],
+  },
+  {
+    id: 'operadores',
+    titulo: 'Rendimiento de Operadores',
+    desc: 'Carga de trabajo y eficiencia de resolución por cada operador asignado.',
+    icon: <EngineeringIcon />,
+    color: '#06B6D4',
+    soporta: ['excel', 'csv'],
   },
   {
     id: 'pendientes',
@@ -66,13 +89,13 @@ const TIPOS_REPORTE = [
     soporta: ['pdf','excel'],
   },
   {
-  id: 'ordenes',
-  titulo: 'Órdenes de trabajo activas',
-  desc: 'Todos los reportes pendientes con prioridad, asignación y conteo de notas. Ordenado por prioridad.',
-  icon: <AssignmentIcon />,
-  color: '#7C3AED',
-  soporta: ['pdf', 'excel'],
-},
+    id: 'ordenes',
+    titulo: 'Órdenes de trabajo activas',
+    desc: 'Todos los reportes pendientes con prioridad, asignación y conteo de notas.',
+    icon: <AssignmentIcon />,
+    color: '#475569',
+    soporta: ['pdf', 'excel'],
+  },
 ]
 
 const PERIODOS = [
@@ -84,7 +107,7 @@ const PERIODOS = [
   { value: 'todos',  label: 'Todo el historial', dias: null },
 ]
 
-// ── Chip de estatus pequeño ───────────────────────────────────
+// ── Componentes Visuales Auxiliares ──────────────────────────
 function MiniEstatusChip({ value }) {
   const e = ESTATUS_MAP[value] ?? ESTATUS_MAP['Nuevo']
   return (
@@ -95,13 +118,13 @@ function MiniEstatusChip({ value }) {
   )
 }
 
-// ── Tarjeta de tipo de reporte ────────────────────────────────
 function TipoReporteCard({ tipo, seleccionado, onClick }) {
   return (
     <Card
       onClick={onClick}
       sx={{
         cursor: 'pointer',
+        flexShrink: 0, // <--- CORRECCIÓN 1: Evita que la tarjeta se aplaste
         border: '1.5px solid',
         borderColor: seleccionado ? tipo.color : 'divider',
         bgcolor: seleccionado ? `${tipo.color}08` : 'background.paper',
@@ -119,14 +142,14 @@ function TipoReporteCard({ tipo, seleccionado, onClick }) {
           }}>
             {tipo.icon}
           </Box>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="body2" fontWeight={700} sx={{ color: seleccionado ? tipo.color : 'text.primary' }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}> {/* <--- CORRECCIÓN 2: minWidth 0 para envolver texto */}
+            <Typography variant="body2" fontWeight={700} sx={{ color: seleccionado ? tipo.color : 'text.primary', lineHeight: 1.2 }}>
               {tipo.titulo}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4, display: 'block', mt: 0.5 }}>
               {tipo.desc}
             </Typography>
-            <Box sx={{ display: 'flex', gap: 0.5, mt: 0.75, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', gap: 0.5, mt: 1, flexWrap: 'wrap' }}>
               {tipo.soporta.map(f => (
                 <Chip key={f} label={f.toUpperCase()} size="small" sx={{
                   height: 16, fontSize: 9, fontWeight: 700,
@@ -142,32 +165,18 @@ function TipoReporteCard({ tipo, seleccionado, onClick }) {
   )
 }
 
-// ── Vista previa de datos ─────────────────────────────────────
-function VistaPrevia({ reportes, tipo, loading }) {
-  if (loading) return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-      <CircularProgress size={28} />
-    </Box>
-  )
-
-  if (!reportes.length) return (
-    <Box sx={{ textAlign: 'center', py: 4 }}>
-      <Typography color="text.secondary" variant="body2">
-        No hay datos para los filtros seleccionados
-      </Typography>
-    </Box>
-  )
+// ── Vista previa General ─────────────────────────────────────
+function VistaPrevia({ reportes, loading }) {
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={28} /></Box>
+  if (!reportes.length) return <Box sx={{ textAlign: 'center', py: 4 }}><Typography color="text.secondary" variant="body2">No hay datos para los filtros seleccionados</Typography></Box>
 
   const muestra = reportes.slice(0, 8)
 
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-        <Typography variant="caption" color="text.secondary">
-          Vista previa — primeros {muestra.length} de {reportes.length} registros
-        </Typography>
-        <Chip label={`${reportes.length} registros`} size="small"
-          sx={{ height: 20, fontSize: 10, fontWeight: 600 }} />
+        <Typography variant="caption" color="text.secondary">Vista previa — primeros {muestra.length} de {reportes.length} registros</Typography>
+        <Chip label={`${reportes.length} registros`} size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600 }} />
       </Box>
       <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, maxHeight: 320 }}>
         <Table size="small" stickyHeader>
@@ -175,9 +184,9 @@ function VistaPrevia({ reportes, tipo, loading }) {
             <TableRow>
               <TableCell sx={{ fontSize: 11, fontWeight: 700 }}>Folio</TableCell>
               <TableCell sx={{ fontSize: 11, fontWeight: 700 }}>Categoría</TableCell>
+              <TableCell sx={{ fontSize: 11, fontWeight: 700 }}>Sector</TableCell>
               <TableCell sx={{ fontSize: 11, fontWeight: 700 }}>Fecha</TableCell>
               <TableCell sx={{ fontSize: 11, fontWeight: 700 }}>Estatus</TableCell>
-              <TableCell sx={{ fontSize: 11, fontWeight: 700, maxWidth: 140 }}>Ubicación</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -185,25 +194,11 @@ function VistaPrevia({ reportes, tipo, loading }) {
               const cat = CATEGORIA_MAP[r.categoria]
               return (
                 <TableRow key={r.id} hover>
-                  <TableCell sx={{ fontFamily: 'monospace', fontSize: 11, color: 'text.secondary' }}>
-                    {r.folio ?? '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="caption">
-                      {cat ? `${cat.emoji} ${cat.label}` : r.categoria ?? '—'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="caption" color="text.secondary">
-                      {r.fecha_legible ?? r.fecha ?? '—'}
-                    </Typography>
-                  </TableCell>
+                  <TableCell sx={{ fontFamily: 'monospace', fontSize: 11, color: 'text.secondary' }}>{r.folio ?? '—'}</TableCell>
+                  <TableCell><Typography variant="caption">{cat ? `${cat.emoji} ${cat.label}` : r.categoria ?? '—'}</Typography></TableCell>
+                  <TableCell><Typography variant="caption" color={r.sector === 'Sin asignar' ? 'text.disabled' : 'primary.main'} fontWeight={600}>{r.sector || 'Sin asignar'}</Typography></TableCell>
+                  <TableCell><Typography variant="caption" color="text.secondary">{r.fecha_legible ?? '—'}</Typography></TableCell>
                   <TableCell><MiniEstatusChip value={r.estatus} /></TableCell>
-                  <TableCell sx={{ maxWidth: 140 }}>
-                    <Typography variant="caption" noWrap title={r.ubicacion}>
-                      {r.ubicacion ?? '—'}
-                    </Typography>
-                  </TableCell>
                 </TableRow>
               )
             })}
@@ -216,25 +211,41 @@ function VistaPrevia({ reportes, tipo, loading }) {
 
 // ── Página principal ──────────────────────────────────────────
 export default function Reportes() {
-  const { municipio }                         = useMunicipio()
+  const { municipio }             = useMunicipio()
+  const { usuarios }              = useUsuarios() // Catálogo de usuarios
+  const [zonas, setZonas]         = useState([])
+
   const [tipoId,    setTipoId]    = useState('general')
   const [periodo,   setPeriodo]   = useState('mes')
   const [catFiltro, setCatFiltro] = useState('')
   const [estFiltro, setEstFiltro] = useState('')
+  const [secFiltro, setSecFiltro] = useState('')
   const [mesAnio,   setMesAnio]   = useState(format(new Date(), 'yyyy-MM'))
-  const [generando, setGenerando] = useState(null) // 'pdf' | 'excel' | 'csv'
+  
+  const [generando, setGenerando] = useState(null)
   const [errorMsg,  setErrorMsg]  = useState('')
 
   const { reportes, loading } = useReportes(periodo === 'todos' ? 'todos' : periodo)
-
   const tipo = TIPOS_REPORTE.find(t => t.id === tipoId)
 
-  // Aplicar filtros adicionales
+  // Cargar Zonas desde Firebase
+  useEffect(() => {
+    const fetchZonas = async () => {
+      try {
+        const qs = await getDocs(collection(db, 'zonas'))
+        setZonas(qs.docs.map(d => ({ id: d.id, ...d.data() })))
+      } catch (e) { console.error("Error cargando zonas", e) }
+    }
+    fetchZonas()
+  }, [])
+
+  // Filtrado General
   const reportesFiltrados = useMemo(() => {
     let r = reportes
     if (catFiltro) r = r.filter(x => x.categoria === catFiltro)
     if (estFiltro) r = r.filter(x => (x.estatus ?? 'Nuevo') === estFiltro)
-    if (tipoId === 'pendientes') r = r.filter(x => ['Nuevo','En proceso'].includes(x.estatus ?? 'Nuevo'))
+    if (secFiltro) r = r.filter(x => x.sector === secFiltro)
+    if (tipoId === 'pendientes' || tipoId === 'ordenes') r = r.filter(x => ['Nuevo','En proceso'].includes(x.estatus ?? 'Nuevo'))
     if (tipoId === 'mensual') {
       const [y, m] = mesAnio.split('-').map(Number)
       r = r.filter(x => {
@@ -243,24 +254,59 @@ export default function Reportes() {
       })
     }
     return r
-  }, [reportes, catFiltro, estFiltro, tipoId, mesAnio])
+  }, [reportes, catFiltro, estFiltro, secFiltro, tipoId, mesAnio])
 
-  // Resumen por categoría para el tipo 'categorias'
+  // Procesamiento para Reporte de Categorías
   const porCategoria = useMemo(() => {
     const total = reportesFiltrados.length
     return CATEGORIAS.map(cat => {
       const lista  = reportesFiltrados.filter(r => r.categoria === cat.firestoreValue)
-      const est    = {}
-      lista.forEach(r => { const e = r.estatus ?? 'Nuevo'; est[e] = (est[e] ?? 0) + 1 })
-      const predominante = Object.entries(est).sort((a,b) => b[1]-a[1])[0]?.[0] ?? '—'
       return {
         ...cat,
         cantidad: lista.length,
         porcentaje: total > 0 ? ((lista.length / total) * 100).toFixed(1) : '0',
-        estatusPredominante: predominante,
       }
-    }).filter(c => c.cantidad > 0)
+    }).filter(c => c.cantidad > 0).sort((a,b) => b.cantidad - a.cantidad)
   }, [reportesFiltrados])
+
+  // Procesamiento para Reporte de Sectores
+  const porSector = useMemo(() => {
+    const total = reportesFiltrados.length
+    const map = {}
+    reportesFiltrados.forEach(r => {
+      const s = r.sector && r.sector !== "Sin asignar" ? r.sector : 'No clasificado'
+      map[s] = (map[s] || 0) + 1
+    })
+    return Object.entries(map).map(([nombre, cantidad]) => ({
+      nombre, cantidad, porcentaje: total > 0 ? ((cantidad / total) * 100).toFixed(1) : '0'
+    })).sort((a,b) => b.cantidad - a.cantidad)
+  }, [reportesFiltrados])
+
+  // Procesamiento para Rendimiento de Operadores (Nombres Completos)
+  const porOperador = useMemo(() => {
+    const map = {}
+    reportesFiltrados.forEach(r => {
+      let asig = 'Sin asignar'
+      
+      if (r.asignado_a && usuarios?.length > 0) {
+        const user = usuarios.find(u => u.id === r.asignado_a)
+        if (user && user.nombre) {
+          asig = user.nombre
+        } else if (r.asignado_nombre) {
+          asig = r.asignado_nombre
+        }
+      } else if (r.asignado_nombre) {
+        asig = r.asignado_nombre
+      }
+
+      if (!map[asig]) map[asig] = { nombre: asig, asignados: 0, resueltos: 0, pendientes: 0 }
+      
+      map[asig].asignados++
+      if (r.estatus === 'Resuelto') map[asig].resueltos++
+      else if (r.estatus !== 'Rechazado' && r.estatus !== 'No aplica') map[asig].pendientes++
+    })
+    return Object.values(map).sort((a,b) => b.asignados - a.asignados)
+  }, [reportesFiltrados, usuarios])
 
   const periodoLabel = PERIODOS.find(p => p.value === periodo)?.label ?? periodo
 
@@ -270,26 +316,28 @@ export default function Reportes() {
     setGenerando(formato)
     try {
       const [anioStr, mesStr] = mesAnio.split('-')
-      const filtros = {
-        periodo: periodoLabel,
-        categoria: catFiltro || null,
-        estatus:   estFiltro || null,
-      }
+      const filtros = { periodo: periodoLabel, categoria: catFiltro || null, estatus: estFiltro || null }
+      
       if (formato === 'pdf') {
         if (tipoId === 'general')    exportarReporteGeneral(reportesFiltrados, filtros, municipio)
         if (tipoId === 'categorias') exportarResumenCategorias(porCategoria, reportesFiltrados.length, filtros, municipio)
         if (tipoId === 'pendientes') exportarPendientes(reportesFiltrados, municipio)
         if (tipoId === 'mensual')    exportarMensual(reportesFiltrados, Number(anioStr), Number(mesStr), municipio)
-        if (tipoId === 'ordenes') exportarOrdenesTrabajo(reportesFiltrados, municipio)
+        if (tipoId === 'ordenes')    exportarOrdenesTrabajo(reportesFiltrados, municipio)
       }
+      
       if (formato === 'excel') {
-        if (tipoId === 'general')    exportarExcelCompleto(reportesFiltrados, municipio)
-        if (tipoId === 'categorias') exportarExcelCompleto(reportesFiltrados, municipio)
         if (tipoId === 'pendientes') exportarExcelPendientes(reportesFiltrados, municipio)
-        if (tipoId === 'mensual')    exportarExcelMensual(reportesFiltrados, Number(anioStr), Number(mesStr), municipio)
-        if (tipoId === 'ordenes') exportarExcelOrdenes(reportesFiltrados, municipio)
+        else if (tipoId === 'mensual') exportarExcelMensual(reportesFiltrados, Number(anioStr), Number(mesStr), municipio)
+        else if (tipoId === 'ordenes') exportarExcelOrdenes(reportesFiltrados, municipio)
+        else exportarExcelCompleto(reportesFiltrados, municipio)
       }
-      if (formato === 'csv') exportarCSV(reportesFiltrados, municipio)
+      
+      if (formato === 'csv') {
+        if (tipoId === 'sectores') exportarCSV(porSector, municipio)
+        else if (tipoId === 'operadores') exportarCSV(porOperador, municipio)
+        else exportarCSV(reportesFiltrados, municipio)
+      }
     } catch (err) {
       console.error('Error al exportar:', err)
       setErrorMsg(`Error al generar el archivo: ${err.message}`)
@@ -300,11 +348,10 @@ export default function Reportes() {
 
   return (
     <Box>
-      {/* Encabezado */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4" fontWeight={700}>Generador de reportes</Typography>
         <Typography variant="body2" color="text.secondary">
-          Exporta la información en PDF, Excel o CSV con los filtros que necesites
+          Analítica, exportación y evaluación de métricas de servicio.
         </Typography>
       </Box>
 
@@ -319,14 +366,10 @@ export default function Reportes() {
                 <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
                   1. Tipo de reporte
                 </Typography>
-                <Stack spacing={1}>
+                {/* Aumento a maxHeight 480 para que la lista no se vea tan ajustada */}
+                <Stack spacing={1.5} sx={{ maxHeight: 480, overflowY: 'auto', pr: 1, pb: 1 }}>
                   {TIPOS_REPORTE.map(t => (
-                    <TipoReporteCard
-                      key={t.id}
-                      tipo={t}
-                      seleccionado={tipoId === t.id}
-                      onClick={() => setTipoId(t.id)}
-                    />
+                    <TipoReporteCard key={t.id} tipo={t} seleccionado={tipoId === t.id} onClick={() => setTipoId(t.id)} />
                   ))}
                 </Stack>
               </CardContent>
@@ -336,14 +379,14 @@ export default function Reportes() {
             <Card>
               <CardContent sx={{ p: 2.5 }}>
                 <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
-                  2. Filtros
+                  2. Parámetros y Filtros
                 </Typography>
                 <Stack spacing={2}>
-                  {/* Período — oculto en mensual */}
+                  
                   {tipoId !== 'mensual' && (
                     <FormControl fullWidth size="small">
-                      <InputLabel>Período</InputLabel>
-                      <Select value={periodo} onChange={e => setPeriodo(e.target.value)} label="Período">
+                      <InputLabel>Período de tiempo</InputLabel>
+                      <Select value={periodo} onChange={e => setPeriodo(e.target.value)} label="Período de tiempo">
                         {PERIODOS.map(p => (
                           <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>
                         ))}
@@ -351,35 +394,35 @@ export default function Reportes() {
                     </FormControl>
                   )}
 
-                  {/* Selector mes/año — solo para mensual */}
                   {tipoId === 'mensual' && (
-                    <TextField
-                      label="Mes y año"
-                      type="month"
-                      value={mesAnio}
-                      onChange={e => setMesAnio(e.target.value)}
-                      size="small" fullWidth
-                      InputLabelProps={{ shrink: true }}
-                      inputProps={{ max: format(new Date(), 'yyyy-MM') }}
-                    />
+                    <TextField label="Mes y año" type="month" value={mesAnio} onChange={e => setMesAnio(e.target.value)} size="small" fullWidth InputLabelProps={{ shrink: true }} inputProps={{ max: format(new Date(), 'yyyy-MM') }} />
                   )}
 
-                  {/* Categoría — solo en general */}
-                  {tipoId === 'general' && (
+                  {['general', 'pendientes', 'ordenes'].includes(tipoId) && (
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Sector / Zona</InputLabel>
+                      <Select value={secFiltro} onChange={e => setSecFiltro(e.target.value)} label="Sector / Zona">
+                        <MenuItem value="">Todos los sectores</MenuItem>
+                        {zonas.map(z => (
+                          <MenuItem key={z.id} value={z.nombre}>{z.nombre}</MenuItem>
+                        ))}
+                        <MenuItem value="Sin asignar"><em>Sin clasificar</em></MenuItem>
+                      </Select>
+                    </FormControl>
+                  )}
+
+                  {['general'].includes(tipoId) && (
                     <FormControl fullWidth size="small">
                       <InputLabel>Categoría</InputLabel>
                       <Select value={catFiltro} onChange={e => setCatFiltro(e.target.value)} label="Categoría">
                         <MenuItem value="">Todas</MenuItem>
                         {CATEGORIAS.map(c => (
-                          <MenuItem key={c.id} value={c.firestoreValue}>
-                            {c.emoji} {c.label}
-                          </MenuItem>
+                          <MenuItem key={c.id} value={c.firestoreValue}>{c.emoji} {c.label}</MenuItem>
                         ))}
                       </Select>
                     </FormControl>
                   )}
 
-                  {/* Estatus — en general y categorias */}
                   {['general','categorias'].includes(tipoId) && (
                     <FormControl fullWidth size="small">
                       <InputLabel>Estatus</InputLabel>
@@ -393,20 +436,12 @@ export default function Reportes() {
                   )}
                 </Stack>
 
-                {/* Resumen del filtro aplicado */}
                 <Box sx={{
                   mt: 2, p: 1.5, bgcolor: 'action.hover',
                   borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 }}>
-                  <Typography variant="caption" color="text.secondary">Registros seleccionados</Typography>
-                  <Chip
-                    label={loading ? '...' : reportesFiltrados.length}
-                    size="small"
-                    sx={{
-                      fontWeight: 700, fontSize: 13, height: 26,
-                      bgcolor: `${tipo.color}18`, color: tipo.color,
-                    }}
-                  />
+                  <Typography variant="caption" color="text.secondary">Total registros analizados</Typography>
+                  <Chip label={loading ? '...' : reportesFiltrados.length} size="small" sx={{ fontWeight: 700, fontSize: 13, height: 26, bgcolor: `${tipo.color}18`, color: tipo.color }} />
                 </Box>
               </CardContent>
             </Card>
@@ -415,61 +450,23 @@ export default function Reportes() {
             <Card>
               <CardContent sx={{ p: 2.5 }}>
                 <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
-                  3. Exportar
+                  3. Ejecutar Exportación
                 </Typography>
-
-                {errorMsg && (
-                  <Alert severity="warning" sx={{ mb: 1.5, borderRadius: 1.5 }} onClose={() => setErrorMsg('')}>
-                    {errorMsg}
-                  </Alert>
-                )}
-
+                {errorMsg && <Alert severity="warning" sx={{ mb: 1.5, borderRadius: 1.5 }} onClose={() => setErrorMsg('')}>{errorMsg}</Alert>}
                 <Stack spacing={1.5}>
-                  {/* PDF */}
                   {tipo.soporta.includes('pdf') && (
-                    <Button
-                      variant="contained"
-                      startIcon={generando === 'pdf' ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfIcon />}
-                      onClick={() => handleExportar('pdf')}
-                      disabled={!!generando || loading}
-                      fullWidth
-                      sx={{
-                        bgcolor: '#DC2626', justifyContent: 'flex-start', borderRadius: 2,
-                        '&:hover': { bgcolor: '#B91C1C' },
-                      }}
-                    >
-                      Descargar PDF
+                    <Button variant="contained" startIcon={generando === 'pdf' ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfIcon />} onClick={() => handleExportar('pdf')} disabled={!!generando || loading} fullWidth sx={{ bgcolor: '#DC2626', justifyContent: 'flex-start', borderRadius: 2, '&:hover': { bgcolor: '#B91C1C' } }}>
+                      Generar Documento PDF
                     </Button>
                   )}
-
-                  {/* Excel */}
                   {tipo.soporta.includes('excel') && (
-                    <Button
-                      variant="contained"
-                      startIcon={generando === 'excel' ? <CircularProgress size={16} color="inherit" /> : <TableChartIcon />}
-                      onClick={() => handleExportar('excel')}
-                      disabled={!!generando || loading}
-                      fullWidth
-                      sx={{
-                        bgcolor: '#15803D', justifyContent: 'flex-start', borderRadius: 2,
-                        '&:hover': { bgcolor: '#166534' },
-                      }}
-                    >
-                      Descargar Excel (.xlsx)
+                    <Button variant="contained" startIcon={generando === 'excel' ? <CircularProgress size={16} color="inherit" /> : <TableChartIcon />} onClick={() => handleExportar('excel')} disabled={!!generando || loading} fullWidth sx={{ bgcolor: '#15803D', justifyContent: 'flex-start', borderRadius: 2, '&:hover': { bgcolor: '#166534' } }}>
+                      Descargar Base Excel (.xlsx)
                     </Button>
                   )}
-
-                  {/* CSV */}
                   {tipo.soporta.includes('csv') && (
-                    <Button
-                      variant="outlined"
-                      startIcon={generando === 'csv' ? <CircularProgress size={16} /> : <DownloadIcon />}
-                      onClick={() => handleExportar('csv')}
-                      disabled={!!generando || loading}
-                      fullWidth
-                      sx={{ justifyContent: 'flex-start', borderRadius: 2 }}
-                    >
-                      Descargar CSV
+                    <Button variant="outlined" startIcon={generando === 'csv' ? <CircularProgress size={16} /> : <DownloadIcon />} onClick={() => handleExportar('csv')} disabled={!!generando || loading} fullWidth sx={{ justifyContent: 'flex-start', borderRadius: 2 }}>
+                      Extraer Datos Raw (.csv)
                     </Button>
                   )}
                 </Stack>
@@ -483,12 +480,7 @@ export default function Reportes() {
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ p: 2.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                <Box sx={{
-                  width: 36, height: 36, borderRadius: 2, flexShrink: 0,
-                  bgcolor: `${tipo.color}18`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: tipo.color, '& svg': { fontSize: 18 },
-                }}>
+                <Box sx={{ width: 36, height: 36, borderRadius: 2, flexShrink: 0, bgcolor: `${tipo.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tipo.color, '& svg': { fontSize: 18 } }}>
                   {tipo.icon}
                 </Box>
                 <Box>
@@ -499,52 +491,69 @@ export default function Reportes() {
 
               <Divider sx={{ mb: 2 }} />
 
-              {/* Vista previa o resumen según el tipo */}
-              {tipoId === 'categorias' ? (
-                <Box>
-                  <Typography variant="caption" color="text.secondary" mb={1.5} display="block">
-                    Resumen — {reportesFiltrados.length} reportes totales
-                  </Typography>
-                  {loading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                      <CircularProgress size={28} />
-                    </Box>
-                  ) : (
-                    <Stack spacing={1.5}>
-                      {porCategoria.map(cat => (
-                        <Box key={cat.id}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                            <Typography variant="body2">
-                              {cat.emoji} {cat.label}
-                            </Typography>
-                            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-                              <Typography variant="caption" color="text.secondary">{cat.porcentaje}%</Typography>
-                              <Typography variant="body2" fontWeight={700}>{cat.cantidad}</Typography>
-                            </Box>
-                          </Box>
-                          <Box sx={{ height: 5, bgcolor: 'action.hover', borderRadius: 3, overflow: 'hidden' }}>
-                            <Box sx={{
-                              height: '100%', borderRadius: 3,
-                              bgcolor: cat.color, width: `${cat.porcentaje}%`,
-                              transition: 'width 0.5s ease',
-                            }} />
-                          </Box>
+              {/* RENDERIZADO DINÁMICO SEGÚN EL TIPO DE REPORTE */}
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={28} /></Box>
+              ) : tipoId === 'categorias' ? (
+                <Stack spacing={1.5}>
+                  {porCategoria.map(cat => (
+                    <Box key={cat.id}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography variant="body2">{cat.emoji} {cat.label}</Typography>
+                        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+                          <Typography variant="caption" color="text.secondary">{cat.porcentaje}%</Typography>
+                          <Typography variant="body2" fontWeight={700}>{cat.cantidad}</Typography>
                         </Box>
-                      ))}
-                      {!porCategoria.length && (
-                        <Typography variant="body2" color="text.secondary" textAlign="center" py={3}>
-                          Sin datos para el período seleccionado
+                      </Box>
+                      <LinearProgress variant="determinate" value={Number(cat.porcentaje)} sx={{ height: 6, borderRadius: 3, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { bgcolor: cat.color } }} />
+                    </Box>
+                  ))}
+                </Stack>
+              ) : tipoId === 'sectores' ? (
+                <Stack spacing={1.5}>
+                  {porSector.map((sec, i) => (
+                    <Box key={i}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography variant="body2" fontWeight={600} color={sec.nombre === 'No clasificado' ? 'text.secondary' : 'text.primary'}>
+                          <RoomIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'text-bottom', color: '#F59E0B' }}/>
+                          {sec.nombre}
                         </Typography>
-                      )}
-                    </Stack>
-                  )}
-                </Box>
+                        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+                          <Typography variant="caption" color="text.secondary">{sec.porcentaje}%</Typography>
+                          <Typography variant="body2" fontWeight={700}>{sec.cantidad}</Typography>
+                        </Box>
+                      </Box>
+                      <LinearProgress variant="determinate" value={Number(sec.porcentaje)} sx={{ height: 6, borderRadius: 3, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { bgcolor: '#F59E0B' } }} />
+                    </Box>
+                  ))}
+                </Stack>
+              ) : tipoId === 'operadores' ? (
+                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+                  <Table size="small">
+                    <TableHead sx={{ bgcolor: 'action.hover' }}>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>Operador / Responsable</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: 11 }}>Tickets Asignados</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: 11, color: 'success.main' }}>Resueltos</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: 11, color: 'error.main' }}>Pendientes</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {porOperador.map((op, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell sx={{ fontWeight: op.nombre === 'Sin asignar' ? 400 : 600, color: op.nombre === 'Sin asignar' ? 'text.secondary' : 'text.primary' }}>
+                            {op.nombre}
+                          </TableCell>
+                          <TableCell align="center"><Chip size="small" label={op.asignados} sx={{ height: 20, fontSize: 11, fontWeight: 700 }} /></TableCell>
+                          <TableCell align="center"><Typography variant="body2" fontWeight={600} color="success.main">{op.resueltos}</Typography></TableCell>
+                          <TableCell align="center"><Typography variant="body2" fontWeight={600} color="error.main">{op.pendientes}</Typography></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
               ) : (
-                <VistaPrevia
-                  reportes={reportesFiltrados}
-                  tipo={tipoId}
-                  loading={loading}
-                />
+                <VistaPrevia reportes={reportesFiltrados} loading={loading} />
               )}
             </CardContent>
           </Card>

@@ -15,6 +15,8 @@ import OrdenesTrabajo        from '@/pages/OrdenesTrabajo'
 import NuevoReporte          from '@/pages/NuevoReporte'
 import ForgotPassword        from '@/pages/ForgotPassword'
 import EditarPerfil          from '@/pages/EditarPerfil';
+import Configuracion         from '@/pages/Configuracion'
+import Inteligencia         from '@/pages/Inteligencia.jsx'
 
 export default function App() {
   return (
@@ -55,6 +57,8 @@ export default function App() {
                 </ProtectedRoute>
               } />
               <Route path="/editar-perfil" element={<EditarPerfil />} />
+              <Route path="configuracion" element={<Configuracion />} />
+              <Route path="inteligencia" element={<Inteligencia />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Route>
           </Routes>

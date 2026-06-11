@@ -1,7 +1,7 @@
 // src/pages/Dashboard.jsx
 import React, { useState, useMemo } from 'react'
 import {
-  Box, Grid, Card, CardContent, Typography, Divider, Skeleton,
+  Box, Grid, Card, CardContent, Typography, Divider, Skeleton, alpha
 } from '@mui/material'
 import ReportIcon       from '@mui/icons-material/Assessment'
 import CheckIcon        from '@mui/icons-material/CheckCircleOutline'
@@ -12,7 +12,9 @@ import FiltroTemporal   from '@/components/ui/FiltroTemporal'
 import PieCategoria     from '@/components/charts/PieCategoria'
 import BarTemporal      from '@/components/charts/BarTemporal'
 import PieEstatus       from '@/components/charts/PieEstatus'
-import ChartDeltaBacklog from '@/components/charts/ChartDeltaBacklog' // <-- IMPORTACIÓN NUEVA
+import ChartDeltaBacklog from '@/components/charts/ChartDeltaBacklog'
+import PieSector        from '@/components/charts/PieSector' // <-- IMPORTACIÓN NUEVA
+import BarSectorCategoria from '@/components/charts/BarSectorCategoria' // <-- IMPORTACIÓN NUEVA
 import { useReportes }  from '@/hooks/useReportes'
 import { useMunicipio } from '@/contexts/MunicipioContext'
 import { CATEGORIAS }   from '@/config/categorias'
@@ -23,19 +25,25 @@ export default function Dashboard() {
   const { municipio }           = useMunicipio()
   const { reportes, loading, stats } = useReportes(filtro)
 
-  const { total, porCategoria, porEstatus } = useMemo(() => {
+  // Modificamos el useMemo para incluir el cálculo de "porSector"
+  const { total, porCategoria, porEstatus, porSector } = useMemo(() => {
     if (loading || !reportes.length) {
-      return { total: 0, porCategoria: {}, porEstatus: {} }
+      return { total: 0, porCategoria: {}, porEstatus: {}, porSector: {} }
     }
     const porCategoria = {}
     const porEstatus   = {}
+    const porSector    = {}
+
     reportes.forEach(r => {
       const cat = r.categoria || 'Otro'
       const est = r.estatus   || 'Nuevo'
+      const sect = r.sector && r.sector !== "Sin asignar" ? r.sector : 'No clasificado'
+      
       porCategoria[cat] = (porCategoria[cat] || 0) + 1
       porEstatus[est]   = (porEstatus[est]   || 0) + 1
+      porSector[sect]   = (porSector[sect]   || 0) + 1
     })
-    return { total: reportes.length, porCategoria, porEstatus }
+    return { total: reportes.length, porCategoria, porEstatus, porSector }
   }, [reportes, loading])
 
   const nuevos      = porEstatus['Nuevo']      ?? 0
@@ -123,7 +131,43 @@ export default function Dashboard() {
         </Grid>
       </Grid>
 
-      {/* NUEVA SECCIÓN: Gráfico de Delta / Backlog */}
+      {/* NUEVA SECCIÓN DE INTELIGENCIA: SECTORES */}
+      <Box sx={{ mb: 3, mt: 4 }}>
+        
+        <Grid container spacing={2}>
+          {/* Gráfico Dona de Sectores */}
+          <Grid item xs={12} md={4}>
+            <Card sx={{ height: '100%' }}>
+              <CardContent sx={{ p: 2.5 }}>
+                <Typography variant="subtitle1" fontWeight={600} mb={0.5}>
+                  Distribución Geográfica
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+                  Concentración de reportes por Sector
+                </Typography>
+                <PieSector porSector={porSector} loading={loading} height={260} />
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Gráfico Barras Cruzado (Sector vs Categoría) */}
+          <Grid item xs={12} md={8}>
+            <Card sx={{ height: '100%' }}>
+              <CardContent sx={{ p: 2.5 }}>
+                <Typography variant="subtitle1" fontWeight={600} mb={0.5}>
+                  Incidencia por Sector y Categoría
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+                  Identifica fácilmente qué tipo de problema afecta más a cada zona.
+                </Typography>
+                <BarSectorCategoria reportes={reportes} loading={loading} height={320} />
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </Box>
+
+      {/* Gráfico de Delta / Backlog */}
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ p: 2.5 }}>
           <Typography variant="h6" fontWeight={600} mb={0.5}>
@@ -143,7 +187,7 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Resto del Dashboard: Tabla de categorías y Estatus por categoría */}
+      {/* Tabla de categorías */}
       <Card>
         <CardContent sx={{ p: 2.5 }}>
           <Typography variant="h6" fontWeight={600} mb={2}>
