@@ -4,7 +4,8 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
   Box, Drawer, AppBar, Toolbar, Typography, IconButton,
   List, ListItem, ListItemButton, ListItemIcon, ListItemText,
-  Avatar, Divider, Chip, Tooltip, useTheme, useMediaQuery, Badge
+  Avatar, Divider, Chip, Tooltip, useTheme, useMediaQuery, Badge,
+  alpha
 } from '@mui/material'
 import MenuIcon            from '@mui/icons-material/Menu'
 import DashboardIcon       from '@mui/icons-material/Dashboard'
@@ -14,29 +15,55 @@ import LogoutIcon          from '@mui/icons-material/Logout'
 import NotificationsIcon   from '@mui/icons-material/NotificationsNone'
 import BusinessIcon        from '@mui/icons-material/Business'
 import PeopleIcon          from '@mui/icons-material/PeopleAlt'
+import SettingsIcon        from '@mui/icons-material/Settings'
+import QueryStatsIcon      from '@mui/icons-material/QueryStats'
+import DescriptionIcon     from '@mui/icons-material/Description'
+import WorkIcon            from '@mui/icons-material/WorkOutline'
+import AddBoxIcon          from '@mui/icons-material/AddBoxOutlined'
+
 import { useAuth }         from '@/contexts/AuthContext'
 import { useMunicipio }    from '@/contexts/MunicipioContext'
-import DescriptionIcon from '@mui/icons-material/Description'
-import WorkIcon from '@mui/icons-material/WorkOutline'
-import UserProfilePopover from '@/pages/UserProfilePopover';
+import UserProfilePopover  from '@/pages/UserProfilePopover';
 import NotificationsPopover from '@/pages/NotificationsPopover';
 import { useNotifications } from '@/hooks/useNotifications';
-import BuscadorGlobal from '@/components/ui/BuscadorGlobal'
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/config/firebase';
-import TicketDetalle from '@/components/tickets/TicketDetalle';
-import AddBoxIcon from '@mui/icons-material/AddBoxOutlined'
+import BuscadorGlobal      from '@/components/ui/BuscadorGlobal'
+import { doc, getDoc }     from 'firebase/firestore';
+import { db }              from '@/config/firebase';
+import TicketDetalle       from '@/components/tickets/TicketDetalle';
 
 const DRAWER_WIDTH = 260
 
-const NAV_ITEMS = [
-  { label: 'General',       icon: <DashboardIcon />,    path: '/dashboard',   rol: null },
-  { label: 'Nuevo reporte', icon: <AddBoxIcon />,       path: '/nuevo-reporte', rol: 'operador' },
-  { label: 'Órdenes de trabajo', icon: <WorkIcon />,    path: '/ordenes',     rol: 'operador' },
-  { label: 'Gestión',       icon: <AssignmentIcon />,   path: '/gestion',     rol: 'admin' },
-  { label: 'Archivo',       icon: <DescriptionIcon />,  path: '/reportes',    rol: null },
-  { label: 'Mapa',          icon: <MapIcon />,          path: '/mapa',        rol: null },
-  { label: 'Usuarios',      icon: <PeopleIcon />,       path: '/usuarios',    rol: 'admin' },  
+// ── AGRUPACIÓN POR SECCIONES ──────────────────────────────────
+const MENU_SECTIONS = [
+  {
+    title: 'Principal',
+    items: [
+      { label: 'General',            icon: <DashboardIcon />,    path: '/dashboard',     rol: null },
+    ]
+  },
+  {
+    title: 'Operación Diaria',
+    items: [
+      { label: 'Nuevo reporte',      icon: <AddBoxIcon />,       path: '/nuevo-reporte', rol: 'operador' },
+      { label: 'Gestión',            icon: <AssignmentIcon />,   path: '/gestion',       rol: 'admin' },
+      { label: 'Órdenes de trabajo', icon: <WorkIcon />,         path: '/ordenes',       rol: 'operador' },
+    ]
+  },
+  {
+    title: 'Análisis y Archivo',
+    items: [
+      { label: 'Mapa',               icon: <MapIcon />,          path: '/mapa',          rol: null },
+      { label: 'Inteligencia',       icon: <QueryStatsIcon />,   path: '/inteligencia',  rol: 'admin' },
+      { label: 'Archivo',            icon: <DescriptionIcon />,  path: '/reportes',      rol: null },
+    ]
+  },
+  {
+    title: 'Administración',
+    items: [
+      { label: 'Usuarios',           icon: <PeopleIcon />,       path: '/usuarios',      rol: 'admin' }, 
+      { label: 'Configuración',      icon: <SettingsIcon />,     path: '/configuracion', rol: 'admin' }, 
+    ]
+  }
 ]
 
 export default function MainLayout() {
@@ -58,12 +85,6 @@ export default function MainLayout() {
     marcarComoLeida 
   } = useNotifications();
 
-  const items = NAV_ITEMS.filter(item =>
-    !item.rol ||
-    (item.rol === 'operador' && esOperador) ||
-    (item.rol === 'admin' && esAdmin)
-  )
-
   const DrawerContent = () => (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Logo + nombre municipio */}
@@ -81,10 +102,7 @@ export default function MainLayout() {
           <img 
             src="/img/logo-municipio.svg" 
             alt="Logo Municipio" 
-            style={{ 
-              width: '100%',
-              height: '100%',
-            }} 
+            style={{ width: '100%', height: '100%' }} 
           />
         </Box>
         <Box>
@@ -97,50 +115,87 @@ export default function MainLayout() {
         </Box>
       </Box>
 
-      {/* Navegación */}
-      <List sx={{ flex: 1, pt: 2, px: 1.5 }}>
-        {items.map(item => {
-          const active = location.pathname === item.path
+      {/* Navegación por Secciones */}
+      <List sx={{ flex: 1, pt: 1, px: 1.5, overflowY: 'auto' }}>
+        {MENU_SECTIONS.map((section, idx) => {
+          
+          // Filtramos los items de esta sección según los permisos del usuario activo
+          const sectionItems = section.items.filter(item =>
+            !item.rol ||
+            (item.rol === 'operador' && esOperador) ||
+            (item.rol === 'admin' && esAdmin)
+          )
+
+          // Si la sección queda vacía (por ej. un Operador viendo la sección Administración), 
+          // no renderizamos ni siquiera el título.
+          if (sectionItems.length === 0) return null
+
           return (
-            <ListItem key={item.path} disablePadding sx={{ mb: 0.5 }}>
-              <ListItemButton
-                onClick={() => { navigate(item.path); if (isMobile) setOpen(false) }}
+            <React.Fragment key={section.title}>
+              {/* Título de la sección (Separador) */}
+              <Typography
+                variant="overline"
                 sx={{
-                  borderRadius: 2,
-                  py: 1.25,
-                  bgcolor: active ? `${municipio.brandColor}18` : 'transparent',
-                  '&:hover': { bgcolor: `${municipio.brandColor}12` },
+                  px: 2,
+                  mt: idx === 0 ? 1 : 2.5, // Más margen arriba si no es la primera sección
+                  mb: 0.5,
+                  display: 'block',
+                  fontSize: '0.68rem',
+                  fontWeight: 800,
+                  color: 'text.secondary',
+                  letterSpacing: '0.08em',
+                  lineHeight: 1
                 }}
               >
-                <ListItemIcon sx={{
-                  minWidth: 38,
-                  color: active ? municipio.brandColor : 'text.secondary',
-                }}>
-                  {item.icon}
-                </ListItemIcon>
-                <ListItemText
-                  primary={item.label}
-                  primaryTypographyProps={{
-                    fontWeight: active ? 600 : 400,
-                    color: active ? municipio.brandColor : 'text.primary',
-                    fontSize: '0.9rem',
-                  }}
-                />
-                {active && (
-                  <Box sx={{
-                    width: 4, height: 24, borderRadius: 2,
-                    bgcolor: municipio.brandColor, ml: 1,
-                  }} />
-                )}
-              </ListItemButton>
-            </ListItem>
+                {section.title}
+              </Typography>
+
+              {/* Elementos clickeables */}
+              {sectionItems.map(item => {
+                const active = location.pathname === item.path
+                return (
+                  <ListItem key={item.path} disablePadding sx={{ mb: 0.5 }}>
+                    <ListItemButton
+                      onClick={() => { navigate(item.path); if (isMobile) setOpen(false) }}
+                      sx={{
+                        borderRadius: 2,
+                        py: 1.25,
+                        bgcolor: active ? `${municipio.brandColor}18` : 'transparent',
+                        '&:hover': { bgcolor: `${municipio.brandColor}12` },
+                      }}
+                    >
+                      <ListItemIcon sx={{
+                        minWidth: 38,
+                        color: active ? municipio.brandColor : 'text.secondary',
+                      }}>
+                        {item.icon}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={item.label}
+                        primaryTypographyProps={{
+                          fontWeight: active ? 700 : 500, // Un poco más fuerte si está activo
+                          color: active ? municipio.brandColor : 'text.primary',
+                          fontSize: '0.9rem',
+                        }}
+                      />
+                      {active && (
+                        <Box sx={{
+                          width: 4, height: 24, borderRadius: 2,
+                          bgcolor: municipio.brandColor, ml: 1,
+                        }} />
+                      )}
+                    </ListItemButton>
+                  </ListItem>
+                )
+              })}
+            </React.Fragment>
           )
         })}
       </List>
 
       <Divider />
 
-      {/* Perfil usuario */}
+      {/* Perfil usuario en la base del Sidebar */}
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
         <Avatar sx={{ bgcolor: municipio.brandColor, width: 36, height: 36, fontSize: 14 }}>
           {user?.email?.[0]?.toUpperCase() ?? 'U'}
@@ -169,12 +224,10 @@ export default function MainLayout() {
   )
 
   useEffect(() => {
-    // 1. Solicitar permiso para Notificaciones
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
 
-    // 2. Truco para desbloquear el audio
     const desbloquearAudio = () => {
       const audio = new Audio('/sounds/notificacion.mp3'); 
       audio.volume = 0; 
@@ -183,7 +236,6 @@ export default function MainLayout() {
     };
 
     document.addEventListener('click', desbloquearAudio, { once: true });
-
     return () => document.removeEventListener('click', desbloquearAudio);
   }, []); 
 
@@ -221,7 +273,7 @@ export default function MainLayout() {
           <Toolbar sx={{ 
             display: 'flex', 
             alignItems: 'center', 
-            flexWrap: 'nowrap', // <-- CORRECCIÓN: Evita que los elementos salten de línea
+            flexWrap: 'nowrap', 
             gap: { xs: 1, sm: 2 }, 
             px: { xs: 1, sm: 2 } 
           }}>
@@ -233,7 +285,7 @@ export default function MainLayout() {
             {/* SECCIÓN BUSCADOR: Contenedor flexible */}
             <Box sx={{ 
               flex: 1, 
-              minWidth: 0, // <-- CORRECCIÓN: Permite que el buscador se encoja
+              minWidth: 0, 
               display: 'flex', 
               alignItems: 'center' 
             }}>
@@ -245,7 +297,7 @@ export default function MainLayout() {
               display: 'flex', 
               alignItems: 'center', 
               gap: { xs: 0.5, sm: 1 }, 
-              flexShrink: 0, // <-- CORRECCIÓN: Evita que los iconos se aplasten
+              flexShrink: 0, 
               ml: 'auto' 
             }}>
               <Tooltip title="Notificaciones">
@@ -320,7 +372,7 @@ export default function MainLayout() {
         {/* Página actual */}
         <Box
           component="main"
-          sx={{ flex: 1, p: { xs: 2, md: 3 }, overflow: 'auto' }}
+          sx={{ flex: 1, p: { xs: 2, md: 3 }, overflow: 'auto', bgcolor: alpha(theme.palette.primary.main, 0.02) }}
         >
           <Outlet />
         </Box>

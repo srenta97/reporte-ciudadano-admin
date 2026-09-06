@@ -1,11 +1,10 @@
 // src/pages/NuevoReporte.jsx
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import {
   Box, Grid, Card, CardContent, Typography, Stack, Divider,
   TextField, FormControl, InputLabel, Select, MenuItem,
   Button, Chip, IconButton, Tooltip, Alert, CircularProgress,
-  Stepper, Step, StepLabel, StepContent, Avatar, Paper,
-  ToggleButtonGroup, ToggleButton,
+  Avatar, ToggleButtonGroup, ToggleButton, InputAdornment
 } from '@mui/material'
 import UploadIcon       from '@mui/icons-material/UploadFileOutlined'
 import DeleteIcon       from '@mui/icons-material/DeleteOutline'
@@ -16,7 +15,8 @@ import CheckIcon        from '@mui/icons-material/CheckCircle'
 import FlagIcon         from '@mui/icons-material/Flag'
 import RestartAltIcon   from '@mui/icons-material/RestartAlt'
 import SendIcon         from '@mui/icons-material/Send'
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
+import SearchIcon       from '@mui/icons-material/Search' // <-- NUEVO
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet' // <-- Agregado useMap
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useNavigate }    from 'react-router-dom'
@@ -27,6 +27,10 @@ import { CATEGORIAS, CATEGORIA_MAP, SUBTIPOS } from '@/config/categorias'
 import { PRIORIDADES }    from '@/hooks/useOrdenesTrabajo'
 import { crearReporteManual, subirFoto } from '@/services/reportesService'
 
+// ── Imports de Firebase para obtener las zonas ────────────────
+import { collection, getDocs } from 'firebase/firestore'
+import { db } from '@/config/firebase'
+
 // ── Fix del ícono de Leaflet en Vite ──────────────────────────
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -34,6 +38,17 @@ L.Icon.Default.mergeOptions({
   iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
+
+// ── Componente auxiliar para re-centrar el mapa ───────────────
+function ChangeMapView({ lat, lon }) {
+  const map = useMap()
+  useEffect(() => {
+    if (lat && lon) {
+      map.flyTo([parseFloat(lat), parseFloat(lon)], 16, { animate: true })
+    }
+  }, [lat, lon, map])
+  return null
+}
 
 // ── Selector de ubicación en el mapa ─────────────────────────
 function MapaSelector({ lat, lon, onChange, centro }) {
@@ -60,6 +75,7 @@ function MapaSelector({ lat, lon, onChange, centro }) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+        <ChangeMapView lat={lat} lon={lon} />
         <ClickHandler />
         {lat && lon && (
           <Marker position={[parseFloat(lat), parseFloat(lon)]} />
@@ -106,6 +122,13 @@ function VistaPreviaReporte({ datos, municipio }) {
             <Typography variant="caption" fontWeight={500}>{datos.lat}, {datos.lon}</Typography>
           </Box>
         )}
+        {/* NUEVO: Mostrar el sector calculado en la vista previa */}
+        {datos.sector && (
+          <Box sx={{ display: 'flex', gap: 0.75 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ minWidth: 80 }}>Sector / Zona</Typography>
+            <Typography variant="caption" fontWeight={700} color="primary.main">{datos.sector}</Typography>
+          </Box>
+        )}
         {datos.telefono && (
           <Box sx={{ display: 'flex', gap: 0.75 }}>
             <Typography variant="caption" color="text.secondary" sx={{ minWidth: 80 }}>Teléfono</Typography>
@@ -149,6 +172,19 @@ function VistaPreviaReporte({ datos, municipio }) {
   )
 }
 
+// ── Función Matemática: Ray-Casting Algorithm ─────────────────
+function pointInPolygon(point, polygon) {
+  let x = point[0], y = point[1];
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    let xi = polygon[i][0], yi = polygon[i][1];
+    let xj = polygon[j][0], yj = polygon[j][1];
+    let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
 // ── Página principal ──────────────────────────────────────────
 export default function NuevoReporte() {
   const navigate          = useNavigate()
@@ -171,6 +207,11 @@ export default function NuevoReporte() {
   const [foto,         setFoto]         = useState(null)        // File object
   const [fotoPreview,  setFotoPreview]  = useState('')          // URL local
   const [modoUbicacion, setModoUbicacion] = useState('texto')   // 'texto' | 'mapa'
+  
+  // NUEVOS ESTADOS: Geocodificación y Sectores
+  const [buscandoDir,  setBuscandoDir]  = useState(false)
+  const [zonasDisponibles, setZonasDisponibles] = useState([])
+  const [sectorCalculado, setSectorCalculado] = useState('Sin asignar')
 
   // Estado de envío
   const [enviando,     setEnviando]     = useState(false)
@@ -179,17 +220,81 @@ export default function NuevoReporte() {
 
   const fileInputRef = useRef(null)
 
-  // Subtipos disponibles para la categoría seleccionada
   const subtipoCat = CATEGORIA_MAP[categoria]
   const subtiposDisponibles = SUBTIPOS[categoria] ?? []
 
-  // Resetear subtipo cuando cambia la categoría
+  // ── EFECTO: Cargar zonas desde Firebase al inicio ────────────
+  useEffect(() => {
+    const fetchZonas = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'zonas'));
+        const zonas = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setZonasDisponibles(zonas);
+      } catch (err) {
+        console.error("Error cargando zonas:", err);
+      }
+    };
+    fetchZonas();
+  }, []);
+
+  // ── EFECTO: Calcular sector al cambiar latitud y longitud ────
+  useEffect(() => {
+    if (!lat || !lon || zonasDisponibles.length === 0) {
+      setSectorCalculado('Sin asignar');
+      return;
+    }
+    
+    let sectorEncontrado = 'Sin asignar';
+    const punto = [parseFloat(lon), parseFloat(lat)]; // Formato GeoJSON: [Lng, Lat]
+
+    for (const z of zonasDisponibles) {
+      try {
+        const geojsonObj = typeof z.geojson === 'string' ? JSON.parse(z.geojson) : z.geojson;
+        if (geojsonObj && geojsonObj.coordinates) {
+          if (pointInPolygon(punto, geojsonObj.coordinates[0])) {
+            sectorEncontrado = z.nombre;
+            break;
+          }
+        }
+      } catch(e) { console.error("Error parseando zona", z.nombre) }
+    }
+    setSectorCalculado(sectorEncontrado);
+  }, [lat, lon, zonasDisponibles]);
+
+  // ── FUNCIÓN: Buscar dirección (Geocodificación OpenStreetMap) ──
+  const handleBuscarDireccion = async () => {
+    if (!ubicacion.trim()) return;
+    setBuscandoDir(true);
+    setError('');
+    
+    try {
+      // Hacemos la búsqueda más precisa agregando el municipio y estado
+      const query = `${ubicacion}, ${municipio.nombre}, ${municipio.estado}, México`;
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+      
+      const res = await fetch(url);
+      const data = await res.json();
+      
+      if (data && data.length > 0) {
+        setLat(parseFloat(data[0].lat).toFixed(6));
+        setLon(parseFloat(data[0].lon).toFixed(6));
+        setModoUbicacion('mapa'); // Cambiamos a vista mapa para que el usuario vea el pin
+      } else {
+        setError('No se encontraron coordenadas para esta dirección. Intenta ser más específico o usa el mapa.');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Error de red al intentar buscar la dirección.');
+    } finally {
+      setBuscandoDir(false);
+    }
+  };
+
   const handleCategoria = (value) => {
     setCategoria(value)
     setSubtipo('')
   }
 
-  // Manejar selección de foto
   const handleFoto = (e) => {
     const archivo = e.target.files?.[0]
     if (!archivo) return
@@ -208,24 +313,20 @@ export default function NuevoReporte() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // Manejar clic en el mapa
   const handleMapClick = useCallback((newLat, newLon) => {
     setLat(newLat)
     setLon(newLon)
   }, [])
 
-  // Manejar asignación de operador
   const handleAsignar = (uid) => {
     setAsignadoA(uid)
     const op = operadores.find(u => u.id === uid)
     setAsignadoNombre(op?.nombre ?? '')
   }
 
-  // Validación
   const camposObligatorios = categoria && ubicacion
   const puedeEnviar = camposObligatorios && !enviando
 
-  // Enviar
   const handleSubmit = async () => {
     if (!puedeEnviar) {
       setError('Por favor selecciona una categoría y escribe la ubicación.')
@@ -235,13 +336,11 @@ export default function NuevoReporte() {
     setEnviando(true)
 
     try {
-      // 1. Subir foto si existe
       let fotoUrl = ''
       if (foto) {
         fotoUrl = await subirFoto(foto, 'tmp', municipio.coleccionReportes)
       }
 
-      // 2. Crear el reporte en Firestore
       const { folio, id } = await crearReporteManual({
         coleccion:      municipio.coleccionReportes,
         categoria,
@@ -250,6 +349,7 @@ export default function NuevoReporte() {
         ubicacion,
         lat,
         lon,
+        sector:         sectorCalculado, // <-- NUEVO: Guardamos el sector calculado
         fotoUrl,
         tieneFoto:      !!foto,
         telefono,
@@ -269,17 +369,15 @@ export default function NuevoReporte() {
     }
   }
 
-  // Resetear para crear otro
   const handleNuevo = () => {
     setCategoria(''); setSubtipo(''); setDescripcion('')
-    setUbicacion(''); setLat(''); setLon('')
+    setUbicacion(''); setLat(''); setLon(''); setSectorCalculado('Sin asignar')
     setTelefono(''); setPrioridad(''); setAsignadoA(''); setAsignadoNombre('')
     setFoto(null); setFotoPreview('')
     setError(''); setExito(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // ── Pantalla de éxito ─────────────────────────────────────
   if (exito) {
     return (
       <Box sx={{ maxWidth: 560, mx: 'auto', pt: 4 }}>
@@ -336,10 +434,8 @@ export default function NuevoReporte() {
     )
   }
 
-  // ── Formulario principal ──────────────────────────────────
   return (
     <Box>
-      {/* Encabezado */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4" fontWeight={700}>Nuevo reporte</Typography>
         <Typography variant="body2" color="text.secondary">
@@ -348,7 +444,6 @@ export default function NuevoReporte() {
       </Box>
 
       <Grid container spacing={2.5}>
-        {/* ── Columna izquierda: formulario ──────────────── */}
         <Grid item xs={12} md={8}>
           <Stack spacing={2}>
 
@@ -362,7 +457,6 @@ export default function NuevoReporte() {
                   Selecciona la categoría y el tipo de problema específico
                 </Typography>
 
-                {/* Grid de categorías */}
                 <Box sx={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
@@ -396,7 +490,6 @@ export default function NuevoReporte() {
                   ))}
                 </Box>
 
-                {/* Subtipo — solo si hay subtipos para la categoría */}
                 {subtiposDisponibles.length > 0 && (
                   <FormControl fullWidth size="small">
                     <InputLabel>Tipo de problema específico</InputLabel>
@@ -441,30 +534,49 @@ export default function NuevoReporte() {
                   </ToggleButtonGroup>
                 </Box>
                 <Typography variant="caption" color="text.secondary" display="block" mb={2}>
-                  Escribe la dirección o selecciona el punto en el mapa
+                  Escribe la dirección. Usa la lupa para ubicarla en el mapa automáticamente.
                 </Typography>
 
-                {/* Siempre visible: dirección en texto */}
+                {/* NUEVO: Campo de texto con botón de Búsqueda Geográfica */}
                 <TextField
                   label="Dirección o referencia"
                   value={ubicacion}
                   onChange={e => setUbicacion(e.target.value)}
-                  placeholder="Ej. Calle Reforma #25, frente a la escuela primaria Benito Juárez"
+                  placeholder="Ej. Calle Reforma #25, frente a la escuela"
                   fullWidth size="small"
-                  multiline rows={2}
+                  multiline={modoUbicacion !== 'mapa'} 
+                  rows={modoUbicacion !== 'mapa' ? 2 : 1}
                   sx={{ mb: modoUbicacion === 'mapa' ? 2 : 0 }}
                   InputProps={{
                     startAdornment: (
-                      <LocationIcon sx={{ fontSize: 18, color: 'text.secondary', mr: 0.5, mt: 0.5, alignSelf: 'flex-start' }} />
+                      <InputAdornment position="start">
+                        <LocationIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                      </InputAdornment>
                     ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Tooltip title="Buscar coordenadas en el mapa">
+                          <span>
+                            <IconButton 
+                              onClick={handleBuscarDireccion} 
+                              disabled={buscandoDir || !ubicacion.trim()}
+                              color="primary"
+                              edge="end"
+                            >
+                              {buscandoDir ? <CircularProgress size={20} /> : <SearchIcon />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </InputAdornment>
+                    )
                   }}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleBuscarDireccion(); } }}
                 />
 
-                {/* Mapa selector */}
                 {modoUbicacion === 'mapa' && (
                   <Box>
                     <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                      Haz clic en el mapa para marcar la ubicación exacta
+                      También puedes hacer clic en el mapa para marcar o afinar la ubicación exacta
                     </Typography>
                     <MapaSelector
                       lat={lat} lon={lon}
@@ -472,13 +584,21 @@ export default function NuevoReporte() {
                       centro={municipio.mapCenter}
                     />
                     {lat && lon && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, flexWrap: 'wrap' }}>
                         <CheckIcon sx={{ fontSize: 14, color: 'success.main' }} />
                         <Typography variant="caption" color="success.main">
                           Coordenadas: {lat}, {lon}
                         </Typography>
+                        {/* Etiqueta visible de la zona asignada */}
+                        <Chip 
+                          label={`Sector: ${sectorCalculado}`} 
+                          size="small" 
+                          variant="outlined" 
+                          color={sectorCalculado !== 'Sin asignar' ? 'primary' : 'default'}
+                          sx={{ height: 20, fontSize: 10, ml: 1 }} 
+                        />
                         <Button size="small" sx={{ fontSize: 11, py: 0, minWidth: 0, ml: 'auto' }}
-                          onClick={() => { setLat(''); setLon('') }}>
+                          onClick={() => { setLat(''); setLon(''); setSectorCalculado('Sin asignar') }}>
                           Limpiar
                         </Button>
                       </Box>
@@ -507,7 +627,6 @@ export default function NuevoReporte() {
                     fullWidth size="small" multiline rows={3}
                   />
 
-                  {/* Upload de foto */}
                   <Box>
                     <input
                       type="file"
@@ -567,7 +686,6 @@ export default function NuevoReporte() {
                     )}
                   </Box>
 
-                  {/* Teléfono del ciudadano */}
                   <TextField
                     label="Teléfono del ciudadano (opcional)"
                     value={telefono}
@@ -640,7 +758,6 @@ export default function NuevoReporte() {
           <Box sx={{ position: 'sticky', top: 80 }}>
             <Stack spacing={2}>
 
-              {/* Vista previa */}
               <Card>
                 <CardContent sx={{ p: 2.5 }}>
                   <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
@@ -650,7 +767,7 @@ export default function NuevoReporte() {
                   {categoria ? (
                     <VistaPreviaReporte
                       datos={{ categoria, subtipo, descripcion, ubicacion, lat, lon,
-                        telefono, prioridad, fotoNombre: foto?.name }}
+                        telefono, prioridad, fotoNombre: foto?.name, sector: sectorCalculado }}
                       municipio={municipio}
                     />
                   ) : (
@@ -663,7 +780,6 @@ export default function NuevoReporte() {
                 </CardContent>
               </Card>
 
-              {/* Checklist de completitud */}
               <Card>
                 <CardContent sx={{ p: 2.5 }}>
                   <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
@@ -698,14 +814,12 @@ export default function NuevoReporte() {
                 </CardContent>
               </Card>
 
-              {/* Error */}
               {error && (
                 <Alert severity="error" sx={{ borderRadius: 2 }} onClose={() => setError('')}>
                   {error}
                 </Alert>
               )}
 
-              {/* Botón de envío */}
               <Button
                 variant="contained"
                 size="large"

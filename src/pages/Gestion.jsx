@@ -1,5 +1,5 @@
 // src/pages/Gestion.jsx
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   Box, Card, CardContent, Typography, Grid, Chip, Stack,
   TextField, InputAdornment, MenuItem, Select, FormControl,
@@ -18,12 +18,16 @@ import FlagIcon        from '@mui/icons-material/Flag'
 import { useReportes } from '@/hooks/useReportes'
 import { useMunicipio }from '@/contexts/MunicipioContext'
 import { useAuth }     from '@/contexts/AuthContext'
-import { CATEGORIAS, CATEGORIA_MAP, ESTATUS, ESTATUS_MAP } from '@/config/categorias'
+import { CATEGORIAS, CATEGORIA_MAP, ESTATUS, ESTATUS_MAP, SUBTIPOS } from '@/config/categorias'
 import FiltroTemporal  from '@/components/ui/FiltroTemporal'
 import { format }      from 'date-fns'
 import { es }          from 'date-fns/locale'
 import { PRIORIDADES, PRIORIDAD_MAP } from '@/hooks/useOrdenesTrabajo'
 import { useUsuarios } from '@/hooks/useUsuarios'
+
+// Imports de Firebase para cargar los Sectores disponibles
+import { collection, getDocs } from 'firebase/firestore'
+import { db } from '@/config/firebase'
 
 // ── Componentes Pequeños (Chips) ─────────────────────────────
 function EstatusChip({ value }) {
@@ -62,13 +66,25 @@ function PrioridadChip({ value }) {
   )
 }
 
-// ── Modal de edición individual ──────────────────────────────
-function ModalEditar({ reporte, open, onClose, onSave }) {
-  const [estatus,         setEstatus]         = useState(reporte?.estatus         ?? 'Nuevo')
-  const [prioridad,       setPrioridad]       = useState(reporte?.prioridad        ?? '')
-  const [atendidoPor,     setAtendidoPor]     = useState(reporte?.atendido_por    ?? '')
-  const [notas,           setNotas]           = useState(reporte?.notas_internas  ?? '')
-  const [fechaResolucion, setFechaResolucion] = useState(reporte?.fecha_resolucion ?? '')
+// ── Modal de edición individual COMPLETO (Corregido visualmente) ──
+function ModalEditar({ reporte, open, onClose, onSave, zonas }) {
+  // Estados de Información del Reporte
+  const [categoria,       setCategoria]       = useState('')
+  const [subtipo,         setSubtipo]         = useState('')
+  const [sector,          setSector]          = useState('')
+  const [ubicacion,       setUbicacion]       = useState('')
+  const [descripcion,     setDescripcion]     = useState('')
+  const [telefono,        setTelefono]        = useState('')
+
+  // Estados de Gestión
+  const [estatus,         setEstatus]         = useState('')
+  const [prioridad,       setPrioridad]       = useState('')
+  const [atendidoPor,     setAtendidoPor]     = useState('')
+  const [notas,           setNotas]           = useState('')
+  const [fechaResolucion, setFechaResolucion] = useState('')
+  const [asignadoA,       setAsignadoA]       = useState('')
+  const [asignadoNombre,  setAsignadoNombre]  = useState('')
+
   const [saving, setSaving] = useState(false)
   const { esAdmin } = useAuth()
   const { usuarios } = useUsuarios()
@@ -76,92 +92,181 @@ function ModalEditar({ reporte, open, onClose, onSave }) {
 
   React.useEffect(() => {
     if (reporte) {
+      setCategoria(reporte.categoria ?? '')
+      setSubtipo(reporte.subtipo ?? '')
+      setSector(reporte.sector ?? 'Sin asignar')
+      setUbicacion(reporte.ubicacion ?? '')
+      setDescripcion(reporte.descripcion ?? '')
+      setTelefono(reporte.telefono ?? '')
+
       setEstatus(reporte.estatus ?? 'Nuevo')
       setPrioridad(reporte.prioridad ?? '')
       setAtendidoPor(reporte.atendido_por ?? '')
       setNotas(reporte.notas_internas ?? '')
       setFechaResolucion(reporte.fecha_resolucion ?? '')
+      setAsignadoA(reporte.asignado_a ?? '')
+      setAsignadoNombre(reporte.asignado_nombre ?? '')
     }
   }, [reporte])
 
   if (!reporte) return null
 
+  const subtiposDisponibles = SUBTIPOS[categoria] ?? []
+
   const handleSave = async () => {
     setSaving(true)
     await onSave(reporte.id, {
+      categoria,
+      subtipo,
+      sector,
+      ubicacion,
+      descripcion,
+      telefono,
       estatus,
       prioridad,
-      atendido_por:    atendidoPor,
-      notas_internas:  notas,
+      atendido_por: atendidoPor,
+      notas_internas: notas,
       fecha_resolucion: fechaResolucion,
+      asignado_a: asignadoA,
+      asignado_nombre: asignadoNombre
     })
     setSaving(false)
     onClose()
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
-      <DialogTitle sx={{ pb: 1 }}>
-        <Typography variant="h6" fontWeight={700}>Gestionar reporte</Typography>
-        <Typography variant="caption" color="text.secondary">Folio: {reporte.folio}</Typography>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      <DialogTitle sx={{ pb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box>
+          <Typography variant="h6" fontWeight={700}>Modificar reporte completo</Typography>
+          <Typography variant="caption" color="text.secondary">Folio: {reporte.folio}</Typography>
+        </Box>
+        <EstatusChip value={estatus} />
       </DialogTitle>
       <Divider />
-      <DialogContent sx={{ pt: 2.5 }}>
-        {/* Resumen omitido por brevedad visual, puedes agregar el que tenías */}
-        <Stack spacing={2.5}>
-          <FormControl fullWidth size="small">
-            <InputLabel>Estatus del reporte</InputLabel>
-            <Select value={estatus} onChange={e => setEstatus(e.target.value)} label="Estatus del reporte">
-              {ESTATUS.map(e => (
-                <MenuItem key={e.value} value={e.value}>{e.label}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <TextField label="Atendido por" value={atendidoPor} onChange={e => setAtendidoPor(e.target.value)} size="small" fullWidth />
-          <TextField label="Fecha de resolución" type="date" value={fechaResolucion} onChange={e => setFechaResolucion(e.target.value)} size="small" fullWidth InputLabelProps={{ shrink: true }} />
-          <TextField label="Notas internas" value={notas} onChange={e => setNotas(e.target.value)} size="small" fullWidth multiline rows={3} />
-          <FormControl fullWidth size="small">
-            <InputLabel>Prioridad</InputLabel>
-            <Select value={prioridad} onChange={e => setPrioridad(e.target.value)} label="Prioridad">
-              <MenuItem value=""><em>Sin definir</em></MenuItem>
-              {PRIORIDADES.map(p => (
-                <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          {esAdmin && (
-            <FormControl fullWidth size="small">
-              <InputLabel>Asignado a</InputLabel>
-              <Select
-                value={reporte.asignado_a ?? ''}
-                onChange={async (e) => {
-                  const uid = e.target.value
-                  const op  = operadores.find(u => u.id === uid)
-                  await onSave(reporte.id, { asignado_a: uid ?? '', asignado_nombre: op?.nombre ?? '' })
-                }}
-                label="Asignado a"
-              >
-                <MenuItem value=""><em>Sin asignar</em></MenuItem>
-                {operadores.map(op => (
-                  <MenuItem key={op.id} value={op.id}>{op.nombre ?? op.email}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
-        </Stack>
+      
+      <DialogContent sx={{ pt: 3, pb: 4 }}>
+        <Grid container spacing={4}>
+          
+          {/* COLUMNA IZQUIERDA: Información del Ciudadano / Reporte */}
+          <Grid item xs={12} md={6}>
+            <Typography variant="overline" color="primary" fontWeight={700} sx={{ mb: 2, display: 'block', lineHeight: 1 }}>
+              Datos del Incidente
+            </Typography>
+            
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Categoría</InputLabel>
+                  <Select value={categoria} onChange={e => {setCategoria(e.target.value); setSubtipo('');}} label="Categoría">
+                    {CATEGORIAS.map(c => (
+                      <MenuItem key={c.id} value={c.firestoreValue}>{c.emoji} {c.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl fullWidth size="small">
+                  <InputLabel>Subtipo</InputLabel>
+                  <Select value={subtipo} onChange={e => setSubtipo(e.target.value)} label="Subtipo">
+                    <MenuItem value=""><em>General / Sin definir</em></MenuItem>
+                    {subtiposDisponibles.map(s => (
+                      <MenuItem key={s} value={s}>{s}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Sector / Zona</InputLabel>
+                  <Select value={sector} onChange={e => setSector(e.target.value)} label="Sector / Zona">
+                    <MenuItem value="Sin asignar"><em>Sin clasificar</em></MenuItem>
+                    {zonas.map(z => (
+                      <MenuItem key={z.id} value={z.nombre}>{z.nombre}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <TextField label="Teléfono" value={telefono} onChange={e => setTelefono(e.target.value)} size="small" fullWidth />
+              </Box>
+
+              <TextField label="Ubicación" value={ubicacion} onChange={e => setUbicacion(e.target.value)} size="small" fullWidth />
+              <TextField label="Descripción ciudadana" value={descripcion} onChange={e => setDescripcion(e.target.value)} size="small" fullWidth multiline minRows={4} />
+            </Box>
+          </Grid>
+
+          {/* COLUMNA DERECHA: Gestión Interna */}
+          <Grid item xs={12} md={6}>
+            <Typography variant="overline" color="secondary" fontWeight={700} sx={{ mb: 2, display: 'block', lineHeight: 1 }}>
+              Gestión Interna
+            </Typography>
+            
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Estatus</InputLabel>
+                  <Select value={estatus} onChange={e => setEstatus(e.target.value)} label="Estatus">
+                    {ESTATUS.map(e => (
+                      <MenuItem key={e.value} value={e.value}>{e.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl fullWidth size="small">
+                  <InputLabel>Prioridad</InputLabel>
+                  <Select value={prioridad} onChange={e => setPrioridad(e.target.value)} label="Prioridad">
+                    <MenuItem value=""><em>Sin definir</em></MenuItem>
+                    {PRIORIDADES.map(p => (
+                      <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+
+              {esAdmin && (
+                <FormControl fullWidth size="small">
+                  <InputLabel>Asignado a (Operador)</InputLabel>
+                  <Select
+                    value={asignadoA}
+                    onChange={(e) => {
+                      const uid = e.target.value
+                      const op  = operadores.find(u => u.id === uid)
+                      setAsignadoA(uid)
+                      setAsignadoNombre(op?.nombre ?? '')
+                    }}
+                    label="Asignado a (Operador)"
+                  >
+                    <MenuItem value=""><em>Sin asignar</em></MenuItem>
+                    {operadores.map(op => (
+                      <MenuItem key={op.id} value={op.id}>{op.nombre ?? op.email}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <TextField label="Atendido por" value={atendidoPor} onChange={e => setAtendidoPor(e.target.value)} size="small" fullWidth placeholder="Nombre libre" />
+                <TextField label="Fecha de resolución" type="date" value={fechaResolucion} onChange={e => setFechaResolucion(e.target.value)} size="small" fullWidth InputLabelProps={{ shrink: true }} />
+              </Box>
+
+              <TextField label="Notas operativas (Internas)" value={notas} onChange={e => setNotas(e.target.value)} size="small" fullWidth multiline minRows={esAdmin ? 4 : 5} />
+            </Box>
+          </Grid>
+
+        </Grid>
       </DialogContent>
       <Divider />
       <DialogActions sx={{ p: 2.5, gap: 1 }}>
         <Button onClick={onClose} variant="outlined" sx={{ borderRadius: 2 }}>Cancelar</Button>
         <Button onClick={handleSave} variant="contained" disabled={saving} sx={{ borderRadius: 2, minWidth: 100 }}>
-          {saving ? <CircularProgress size={18} color="inherit" /> : 'Guardar'}
+          {saving ? <CircularProgress size={18} color="inherit" /> : 'Guardar Cambios'}
         </Button>
       </DialogActions>
     </Dialog>
   )
 }
 
-// ── Fila expandible de la tabla (CORREGIDA) ──────────────────
+// ── Fila expandible de la tabla ───────────────────────────────
 function FilaReporte({ reporte, onEditar, isSelected, onSelect }) {
   const [expanded, setExpanded] = useState(false)
   
@@ -173,12 +278,10 @@ function FilaReporte({ reporte, onEditar, isSelected, onSelect }) {
         sx={{ cursor: 'pointer', '& td': { borderBottom: expanded ? 'none' : undefined } }}
         onClick={() => setExpanded(v => !v)}
       >
-        {/* Checkbox Individual */}
         <TableCell padding="checkbox" onClick={e => e.stopPropagation()}>
           <Checkbox checked={isSelected} onChange={(e) => onSelect(e, reporte.id)} />
         </TableCell>
 
-        {/* Celdas ordenadas para coincidir con el TableHead */}
         <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: 'text.secondary', whiteSpace: 'nowrap' }}>
           {reporte.folio}
         </TableCell>
@@ -199,7 +302,7 @@ function FilaReporte({ reporte, onEditar, isSelected, onSelect }) {
         
         <TableCell align="right" onClick={e => e.stopPropagation()}>
           <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-            <Tooltip title="Editar reporte">
+            <Tooltip title="Editar todos los campos">
               <IconButton size="small" onClick={() => onEditar(reporte)}>
                 <EditIcon fontSize="small" />
               </IconButton>
@@ -226,6 +329,12 @@ function FilaReporte({ reporte, onEditar, isSelected, onSelect }) {
                 <Box>
                   <Typography variant="caption" color="text.secondary" display="block">Subtipo</Typography>
                   <Typography variant="body2" fontWeight={500}>{reporte.subtipo}</Typography>
+                </Box>
+              )}
+              {reporte.sector && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block">Sector / Zona</Typography>
+                  <Typography variant="body2" fontWeight={500}>{reporte.sector}</Typography>
                 </Box>
               )}
               <Box>
@@ -255,8 +364,10 @@ export default function Gestion() {
   const [page,         setPage]         = useState(0)
   const [rowsPerPage,  setRowsPerPage]  = useState(20)
   const [reporteEdit,  setReporteEdit]  = useState(null)
+  
+  const [zonas,        setZonas]        = useState([])
 
-  // Estados para Acciones Masivas (Bulk Load)
+  // Estados para Acciones Masivas
   const [selected, setSelected] = useState([])
   const [bulkActionType, setBulkActionType] = useState('') 
   const [bulkActionValue, setBulkActionValue] = useState('')
@@ -264,10 +375,19 @@ export default function Gestion() {
 
   const { reportes, loading, actualizarReporte } = useReportes(filtro)
   const { esAdmin } = useAuth()
-  
-  // Necesitamos los usuarios para poder asignarlos masivamente
   const { usuarios } = useUsuarios()
   const operadores = usuarios.filter(u => ['operador','admin'].includes(u.rol) && u.activo !== false)
+
+  // Cargar Zonas desde Firebase (Para el modal de edición)
+  useEffect(() => {
+    const fetchZonas = async () => {
+      try {
+        const qs = await getDocs(collection(db, 'zonas'))
+        setZonas(qs.docs.map(d => ({ id: d.id, ...d.data() })))
+      } catch (e) { console.error("Error cargando zonas", e) }
+    }
+    fetchZonas()
+  }, [])
 
   const filtrados = useMemo(() => {
     return reportes.filter(r => {
@@ -280,7 +400,6 @@ export default function Gestion() {
 
   const paginados = filtrados.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
 
-  // ── Lógica de Selección Masiva ──
   const handleSelectAllClick = (event) => {
     if (event.target.checked) {
       setSelected(paginados.map(r => r.id))
@@ -306,7 +425,6 @@ export default function Gestion() {
     setSelected(newSelected)
   }
 
-  // ── Lógica de Aplicación Masiva ──
   const applyBulkAction = async () => {
     if (!bulkActionType || !bulkActionValue || selected.length === 0) return
     setIsBulking(true)
@@ -322,10 +440,8 @@ export default function Gestion() {
       updateData.asignado_nombre = op ? op.nombre : ''
     }
 
-    // Actualizamos en paralelo todos los reportes seleccionados
     await Promise.all(selected.map(id => actualizarReporte(id, updateData)))
 
-    // Limpiamos selección al terminar
     setSelected([])
     setBulkActionType('')
     setBulkActionValue('')
@@ -334,7 +450,6 @@ export default function Gestion() {
 
   return (
     <Box>
-      {/* Encabezado y Filtros se mantienen iguales... */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography variant="h4" fontWeight={700}>Gestión de reportes</Typography>
@@ -363,7 +478,6 @@ export default function Gestion() {
               </Select>
             </FormControl>
 
-            {/* Sub-menú Dinámico dependiendo de la acción seleccionada */}
             {bulkActionType === 'estatus' && (
               <FormControl size="small" sx={{ minWidth: 160, bgcolor: 'background.paper', borderRadius: 1 }}>
                 <Select value={bulkActionValue} onChange={(e) => setBulkActionValue(e.target.value)} displayEmpty>
@@ -409,7 +523,6 @@ export default function Gestion() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                {/* Checkbox Maestro */}
                 <TableCell padding="checkbox">
                   <Checkbox
                     indeterminate={selected.length > 0 && selected.length < paginados.length}
@@ -431,7 +544,6 @@ export default function Gestion() {
               {loading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <TableRow key={i}>
-                    {/* Ajustado a 9 columnas por el checkbox */}
                     {Array.from({ length: 9 }).map((_, j) => (
                       <TableCell key={j}><Box sx={{ height: 20, bgcolor: 'action.hover', borderRadius: 1 }} /></TableCell>
                     ))}
@@ -470,6 +582,7 @@ export default function Gestion() {
 
       <ModalEditar
         reporte={reporteEdit}
+        zonas={zonas}
         open={!!reporteEdit}
         onClose={() => setReporteEdit(null)}
         onSave={actualizarReporte}

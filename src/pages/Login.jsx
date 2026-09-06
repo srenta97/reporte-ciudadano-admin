@@ -70,19 +70,22 @@ export default function Login() {
         {/* Header con logo */}
         <Box sx={{ textAlign: 'center', mb: 4 }}>
           <Box sx={{
-            width: 60, height: 60, borderRadius: 3,
-            bgcolor: municipio.brandColor,
+            width: 130, height: 130, borderRadius: 3,
             display: 'inline-flex', alignItems: 'center',
             justifyContent: 'center', mb: 2,
-            boxShadow: `0 8px 24px ${municipio.brandColor}40`,
+            
           }}>
-            <BusinessIcon sx={{ color: 'white', fontSize: 28 }} />
+            <img 
+              src="/img/logo-municipio.svg" 
+              alt="Logo Municipio" 
+              style={{ width: '100%', height: '100%' }} 
+            />
           </Box>
           <Typography variant="h4" fontWeight={700} color="text.primary">
             Bienvenido
           </Typography>
           <Typography variant="body2" color="text.secondary" mt={0.5}>
-            Panel Administrativo · {municipio.nombre}, {municipio.estado}
+            Reporte Ciudadano · {municipio.nombre}, {municipio.estado}
           </Typography>
         </Box>
 

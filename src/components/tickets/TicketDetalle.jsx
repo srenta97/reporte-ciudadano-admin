@@ -8,25 +8,31 @@ import React, { useState, useRef, useEffect } from 'react'
 import {
   Drawer, Box, Typography, Divider, Chip, Stack, IconButton,
   Button, TextField, Select, MenuItem, FormControl, InputLabel,
-  Avatar, Tooltip, CircularProgress, Alert,
+  Avatar, Tooltip, CircularProgress, Accordion, AccordionSummary, 
+  AccordionDetails, alpha, useTheme
 } from '@mui/material'
-import CloseIcon         from '@mui/icons-material/Close'
-import SendIcon          from '@mui/icons-material/Send'
-import EditNoteIcon      from '@mui/icons-material/EditNote'
-import SwapHorizIcon     from '@mui/icons-material/SwapHoriz'
-import PersonIcon        from '@mui/icons-material/PersonOutline'
-import FlagIcon          from '@mui/icons-material/Flag'
-import OpenInNewIcon     from '@mui/icons-material/OpenInNew'
-import ContentPasteIcon  from '@mui/icons-material/ContentPaste'
-import PictureAsPdfIcon  from '@mui/icons-material/PictureAsPdf'
-import { format }        from 'date-fns'
-import { es }            from 'date-fns/locale'
+import CloseIcon           from '@mui/icons-material/Close'
+import SendIcon            from '@mui/icons-material/Send'
+import EditNoteIcon        from '@mui/icons-material/EditNote'
+import SwapHorizIcon       from '@mui/icons-material/SwapHoriz'
+import PersonIcon          from '@mui/icons-material/PersonOutline'
+import FlagIcon            from '@mui/icons-material/Flag'
+import OpenInNewIcon       from '@mui/icons-material/OpenInNew'
+import ContentPasteIcon    from '@mui/icons-material/ContentPaste'
+import PictureAsPdfIcon    from '@mui/icons-material/PictureAsPdf'
+import ExpandMoreIcon      from '@mui/icons-material/ExpandMore'
+import InfoOutlinedIcon    from '@mui/icons-material/InfoOutlined'
+import TuneIcon            from '@mui/icons-material/Tune'
+import ForumOutlinedIcon   from '@mui/icons-material/ForumOutlined'
+import RoomIcon            from '@mui/icons-material/Room' // <-- NUEVO: Ícono para el sector
+import { format }          from 'date-fns'
+import { es }              from 'date-fns/locale'
 import { exportarFichaIndividual } from '@/utils/exportPDF'
 import { CATEGORIA_MAP, ESTATUS, ESTATUS_MAP } from '@/config/categorias'
 import { PRIORIDADES, PRIORIDAD_MAP }          from '@/hooks/useOrdenesTrabajo'
-import { useAuth }       from '@/contexts/AuthContext'
-import { useMunicipio }  from '@/contexts/MunicipioContext'
-import { useUsuarios }   from '@/hooks/useUsuarios'
+import { useAuth }         from '@/contexts/AuthContext'
+import { useMunicipio }    from '@/contexts/MunicipioContext'
+import { useUsuarios }     from '@/hooks/useUsuarios'
 
 const DRAWER_WIDTH = 480
 
@@ -91,7 +97,8 @@ export default function TicketDetalle({
   reporte, open, onClose,
   onCambiarEstatus, onCambiarPrioridad, onAgregarNota, onAsignar,
 }) {
-  const { esAdmin, perfil }   = useAuth()
+  const theme                 = useTheme()
+  const { esAdmin }           = useAuth()
   const { municipio }         = useMunicipio()
   const { usuarios }          = useUsuarios()
 
@@ -100,7 +107,9 @@ export default function TicketDetalle({
   const [generandoPdf,  setGenerandoPdf]  = useState(false)
   const [estatusLocal,  setEstatusLocal]  = useState('')
   const [prioridadLocal,setPrioridadLocal]= useState('')
-  const actividadRef = useRef(null)
+  
+  // Refenderizado para autoscroll
+  const actividadEndRef = useRef(null)
 
   useEffect(() => {
     if (reporte) {
@@ -110,12 +119,12 @@ export default function TicketDetalle({
     }
   }, [reporte?.id])
 
-  // Scroll al fondo del historial al abrirse
+  // Scroll al fondo del historial al abrirse o al enviar un nuevo mensaje
   useEffect(() => {
-    if (open && actividadRef.current) {
+    if (open) {
       setTimeout(() => {
-        actividadRef.current?.scrollTo({ top: actividadRef.current.scrollHeight, behavior: 'smooth' })
-      }, 200)
+        actividadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      }, 300)
     }
   }, [open, reporte?.actividad?.length])
 
@@ -167,6 +176,16 @@ export default function TicketDetalle({
     }
   }
 
+  // Estilo base para los acordeones para que se vean modernos
+  const accordionStyle = {
+    boxShadow: 'none',
+    border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+    borderRadius: '12px !important', 
+    mb: 1.5,
+    '&:before': { display: 'none' }, 
+    overflow: 'hidden'
+  }
+
   return (
     <Drawer
       anchor="right"
@@ -192,9 +211,22 @@ export default function TicketDetalle({
               {reporte.subtipo}
             </Typography>
           )}
-          <Stack direction="row" spacing={0.75} sx={{ mt: 1 }}>
+          <Stack direction="row" spacing={0.75} sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
             <EstatusChip value={estatusLocal} />
             <PrioridadChip value={prioridadLocal} />
+            
+            {/* NUEVO: Etiqueta visible del Sector en el encabezado superior */}
+            {reporte.sector && reporte.sector !== 'Sin asignar' && (
+              <Chip 
+                icon={<RoomIcon style={{ fontSize: 13, color: 'white' }} />}
+                label={reporte.sector} 
+                size="small"
+                sx={{ 
+                  height: 22, fontSize: 11, fontWeight: 700, 
+                  bgcolor: 'rgba(255,255,255,0.2)', color: 'white' 
+                }} 
+              />
+            )}
           </Stack>
         </Box>
         {/* Contenedor de los botones de acción del Header */}
@@ -214,181 +246,225 @@ export default function TicketDetalle({
         </Box>
       </Box>
 
-      {/* ── Cuerpo scrolleable ───────────────────────────── */}
-      <Box sx={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {/* ── Cuerpo con Acordeones ───────────────────────────── */}
+      {/* Usamos scroll nativo en todo el contenedor, esto arregla el problema de móviles */}
+      <Box sx={{ flex: 1, overflowY: 'auto', p: 2, bgcolor: alpha(theme.palette.divider, 0.02) }}>
 
-        {/* Datos del reporte */}
-        <Box sx={{ p: 2.5 }}>
-          <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10 }}>
-            Información del reporte
-          </Typography>
-          <Box sx={{ mt: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            {[
-              { label: 'Fecha reporte', value: safeDate(reporte) },
-              { label: 'Teléfono', value: reporte.telefono ?? '—' },
-              { label: 'Atendido por', value: reporte.atendido_por || '—' },
-              { label: 'Foto adjunta', value: reporte.tiene_foto === 'si' ? '✅ Sí' : '❌ No' },
-            ].map(item => (
-              <Box key={item.label}>
-                <Typography variant="caption" color="text.secondary" display="block">{item.label}</Typography>
-                <Typography variant="body2" fontWeight={500}>{item.value}</Typography>
+        {/* 1. ACORDEÓN: Información del reporte */}
+        <Accordion defaultExpanded sx={accordionStyle}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: 'background.paper', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.4)}` }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Box sx={{ p: 0.75, borderRadius: 1.5, bgcolor: '#EFF6FF', color: '#3B82F6', display: 'flex' }}>
+                 <InfoOutlinedIcon fontSize="small" />
               </Box>
-            ))}
-            <Box sx={{ gridColumn: '1 / -1' }}>
-              <Typography variant="caption" color="text.secondary" display="block">Ubicación</Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
-                  {reporte.ubicacion || '—'}
-                </Typography>
-                {reporte.lat && reporte.lon && (
-                  <Tooltip title="Ver en Google Maps">
-                    <IconButton size="small"
-                      href={`https://maps.google.com/?q=${reporte.lat},${reporte.lon}`}
-                      target="_blank" component="a" rel="noopener noreferrer">
-                      <OpenInNewIcon sx={{ fontSize: 14 }} />
-                    </IconButton>
-                  </Tooltip>
-                )}
-              </Box>
+              <Typography fontWeight={700} sx={{ fontSize: 14 }}>
+                Información general
+              </Typography>
             </Box>
-          </Box>
+          </AccordionSummary>
+          <AccordionDetails sx={{ bgcolor: 'background.paper', p: 2.5 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              {[
+                { label: 'Fecha reporte', value: safeDate(reporte) },
+                // NUEVO: Agregado el Sector directamente en los datos de la cuadrícula
+                { label: 'Sector / Zona', value: reporte.sector || 'Sin asignar' },
+                { label: 'Teléfono', value: reporte.telefono ?? '—' },
+                { label: 'Foto adjunta', value: reporte.tiene_foto === 'si' ? '✅ Sí' : '❌ No' },
+              ].map(item => (
+                <Box key={item.label}>
+                  <Typography variant="caption" color="text.secondary" display="block">{item.label}</Typography>
+                  <Typography variant="body2" fontWeight={500}>{item.value}</Typography>
+                </Box>
+              ))}
+              <Box sx={{ gridColumn: '1 / -1' }}>
+                <Typography variant="caption" color="text.secondary" display="block">Ubicación</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
+                    {reporte.ubicacion || '—'}
+                  </Typography>
+                  {reporte.lat && reporte.lon && (
+                    <Tooltip title="Ver en Google Maps">
+                      <IconButton size="small"
+                        href={`https://maps.google.com/?q=$${reporte.lat},${reporte.lon}`}
+                        target="_blank" component="a" rel="noopener noreferrer">
+                        <OpenInNewIcon sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Box>
+              </Box>
+              {reporte.descripcion && (
+                <Box sx={{ gridColumn: '1 / -1' }}>
+                  <Typography variant="caption" color="text.secondary" display="block">Descripción ciudadana</Typography>
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>{reporte.descripcion}</Typography>
+                </Box>
+              )}
+            </Box>
 
-          {/* Foto */}
-          {reporte.foto_url && (
-            <Box
-              component="img" src={reporte.foto_url} alt="Evidencia"
-              sx={{ width: '100%', borderRadius: 2, mt: 1.5, maxHeight: 180, objectFit: 'cover', cursor: 'pointer' }}
-              onClick={() => window.open(reporte.foto_url, '_blank')}
-            />
-          )}
-        </Box>
+            {/* Foto */}
+            {reporte.foto_url && (
+              <Box
+                component="img" src={reporte.foto_url} alt="Evidencia"
+                sx={{ width: '100%', borderRadius: 2, mt: 2, maxHeight: 180, objectFit: 'cover', cursor: 'pointer' }}
+                onClick={() => window.open(reporte.foto_url, '_blank')}
+              />
+            )}
+          </AccordionDetails>
+        </Accordion>
 
-        <Divider />
-
-        {/* Controles de gestión */}
-        <Box sx={{ p: 2.5 }}>
-          <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10 }}>
-            Gestión
-          </Typography>
-          <Stack spacing={1.5} sx={{ mt: 1 }}>
-            {/* Estatus */}
-            <FormControl fullWidth size="small">
-              <InputLabel>Estatus</InputLabel>
-              <Select value={estatusLocal} onChange={e => handleEstatusChange(e.target.value)} label="Estatus">
-                {ESTATUS.map(e => (
-                  <MenuItem key={e.value} value={e.value}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: e.color, flexShrink: 0 }} />
-                      {e.label}
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            {/* Prioridad */}
-            <FormControl fullWidth size="small">
-              <InputLabel>Prioridad</InputLabel>
-              <Select value={prioridadLocal} onChange={e => handlePrioridadChange(e.target.value)} label="Prioridad">
-                {PRIORIDADES.map(p => (
-                  <MenuItem key={p.value} value={p.value}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <FlagIcon sx={{ fontSize: 14, color: p.color }} />
-                      {p.label}
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            {/* Asignación — solo admin */}
-            {esAdmin && (
+        {/* 2. ACORDEÓN: Gestión Operativa */}
+        <Accordion defaultExpanded sx={accordionStyle}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: 'background.paper', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.4)}` }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Box sx={{ p: 0.75, borderRadius: 1.5, bgcolor: '#FFFBEB', color: '#D97706', display: 'flex' }}>
+                 <TuneIcon fontSize="small" />
+              </Box>
+              <Typography fontWeight={700} sx={{ fontSize: 14 }}>
+                Gestión operativa
+              </Typography>
+            </Box>
+          </AccordionSummary>
+          <AccordionDetails sx={{ bgcolor: 'background.paper', p: 2.5 }}>
+            <Stack spacing={2}>
+              {/* Estatus */}
               <FormControl fullWidth size="small">
-                <InputLabel>Asignado a</InputLabel>
-                <Select
-                  value={reporte.asignado_a ?? ''}
-                  onChange={handleAsignar}
-                  label="Asignado a"
-                >
-                  <MenuItem value=""><em>Sin asignar</em></MenuItem>
-                  {operadores.map(op => (
-                    <MenuItem key={op.id} value={op.id}>
+                <InputLabel>Estatus actual</InputLabel>
+                <Select value={estatusLocal} onChange={e => handleEstatusChange(e.target.value)} label="Estatus actual">
+                  {ESTATUS.map(e => (
+                    <MenuItem key={e.value} value={e.value}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Avatar sx={{ width: 22, height: 22, fontSize: 10, bgcolor: municipio.brandColor }}>
-                          {(op.nombre || op.email || 'O')[0].toUpperCase()}
-                        </Avatar>
-                        {op.nombre ?? op.email}
-                        <Chip label={op.rol} size="small" sx={{ height: 16, fontSize: 9, ml: 0.5 }} />
+                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: e.color, flexShrink: 0 }} />
+                        {e.label}
                       </Box>
                     </MenuItem>
                   ))}
                 </Select>
               </FormControl>
-            )}
 
-            {/* Mostrar asignación si no es admin */}
-            {!esAdmin && reporte.asignado_nombre && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25,
-                bgcolor: 'action.hover', borderRadius: 2 }}>
-                <Avatar sx={{ width: 26, height: 26, fontSize: 11, bgcolor: municipio.brandColor }}>
-                  {reporte.asignado_nombre[0]?.toUpperCase()}
-                </Avatar>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block">Asignado a</Typography>
-                  <Typography variant="body2" fontWeight={600}>{reporte.asignado_nombre}</Typography>
+              {/* Prioridad */}
+              <FormControl fullWidth size="small">
+                <InputLabel>Nivel de prioridad</InputLabel>
+                <Select value={prioridadLocal} onChange={e => handlePrioridadChange(e.target.value)} label="Nivel de prioridad">
+                  {PRIORIDADES.map(p => (
+                    <MenuItem key={p.value} value={p.value}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <FlagIcon sx={{ fontSize: 14, color: p.color }} />
+                        {p.label}
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              {/* Asignación — solo admin */}
+              {esAdmin && (
+                <FormControl fullWidth size="small">
+                  <InputLabel>Asignar operador</InputLabel>
+                  <Select
+                    value={reporte.asignado_a ?? ''}
+                    onChange={handleAsignar}
+                    label="Asignar operador"
+                  >
+                    <MenuItem value=""><em>Sin asignar</em></MenuItem>
+                    {operadores.map(op => (
+                      <MenuItem key={op.id} value={op.id}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Avatar sx={{ width: 22, height: 22, fontSize: 10, bgcolor: municipio.brandColor }}>
+                            {(op.nombre || op.email || 'O')[0].toUpperCase()}
+                          </Avatar>
+                          {op.nombre ?? op.email}
+                          <Chip label={op.rol} size="small" sx={{ height: 16, fontSize: 9, ml: 0.5 }} />
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+
+              {/* Mostrar asignación si no es admin */}
+              {!esAdmin && reporte.asignado_nombre && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25,
+                  bgcolor: 'action.hover', borderRadius: 2 }}>
+                  <Avatar sx={{ width: 26, height: 26, fontSize: 11, bgcolor: municipio.brandColor }}>
+                    {reporte.asignado_nombre[0]?.toUpperCase()}
+                  </Avatar>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" display="block">Responsable</Typography>
+                    <Typography variant="body2" fontWeight={600}>{reporte.asignado_nombre}</Typography>
+                  </Box>
                 </Box>
+              )}
+            </Stack>
+          </AccordionDetails>
+        </Accordion>
+
+        {/* 3. ACORDEÓN: Historial de actividad */}
+        <Accordion defaultExpanded sx={accordionStyle}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: 'background.paper', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.4)}` }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+              <Box sx={{ p: 0.75, borderRadius: 1.5, bgcolor: '#ECFDF5', color: '#059669', display: 'flex' }}>
+                 <ForumOutlinedIcon fontSize="small" />
               </Box>
-            )}
-          </Stack>
-        </Box>
-
-        <Divider />
-
-        {/* Historial de actividad */}
-        <Box sx={{ p: 2.5, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10 }}>
-            Actividad ({actividad.length})
-          </Typography>
-
-          <Box
-            ref={actividadRef}
-            sx={{ flex: 1, overflow: 'auto', mt: 1.5, maxHeight: 320,
-              display: 'flex', flexDirection: 'column', gap: 1.5 }}
-          >
-            {actividad.length === 0 && (
-              <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                Sin actividad registrada aún
+              <Typography fontWeight={700} sx={{ fontSize: 14 }}>
+                Historial y Notas
               </Typography>
-            )}
-            {actividad.map((entrada, i) => (
-              <Box key={i} sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
-                {/* Ícono del tipo */}
-                <Box sx={{
-                  width: 26, height: 26, borderRadius: '50%', flexShrink: 0, mt: 0.25,
-                  bgcolor: `${colorTipo(entrada.tipo)}18`,
-                  color: colorTipo(entrada.tipo),
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <TipoIcon tipo={entrada.tipo} />
-                </Box>
-                {/* Contenido */}
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 1 }}>
-                    <Typography variant="caption" fontWeight={600} color="text.primary">
-                      {entrada.autorNombre ?? 'Sistema'}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, fontSize: 10 }}>
-                      {safeDateShort(entrada.fecha)}
+              <Chip 
+                label={actividad.length} 
+                size="small" 
+                sx={{ ml: 'auto', mr: 1, height: 20, fontSize: 11, fontWeight: 700 }} 
+              />
+            </Box>
+          </AccordionSummary>
+          
+          <AccordionDetails sx={{ bgcolor: 'background.paper', p: 0 }}>
+            <Box 
+              sx={{ 
+                maxHeight: { xs: 300, sm: 400 }, 
+                overflowY: 'auto', 
+                p: 2.5,
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: 2 
+              }}
+            >
+              {actividad.length === 0 && (
+                <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+                  Sin actividad registrada aún
+                </Typography>
+              )}
+              {actividad.map((entrada, i) => (
+                <Box key={i} sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
+                  {/* Ícono del tipo */}
+                  <Box sx={{
+                    width: 26, height: 26, borderRadius: '50%', flexShrink: 0, mt: 0.25,
+                    bgcolor: `${colorTipo(entrada.tipo)}18`,
+                    color: colorTipo(entrada.tipo),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <TipoIcon tipo={entrada.tipo} />
+                  </Box>
+                  {/* Contenido */}
+                  <Box sx={{ flex: 1, minWidth: 0, p: 1.25, bgcolor: 'action.hover', borderRadius: 2, borderTopLeftRadius: 4 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 1 }}>
+                      <Typography variant="caption" fontWeight={700} color="text.primary">
+                        {entrada.autorNombre ?? 'Sistema'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, fontSize: 10 }}>
+                        {safeDateShort(entrada.fecha)}
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5, mt: 0.25 }}>
+                      {entrada.texto}
                     </Typography>
                   </Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5 }}>
-                    {entrada.texto}
-                  </Typography>
                 </Box>
-              </Box>
-            ))}
-          </Box>
-        </Box>
+              ))}
+              {/* Elemento invisible para asegurar que el scroll baje hasta el final */}
+              <div ref={actividadEndRef} />
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+
       </Box>
 
       {/* ── Footer: agregar nota ─────────────────────────── */}
@@ -396,7 +472,7 @@ export default function TicketDetalle({
         p: 2, borderTop: '1px solid', borderColor: 'divider',
         bgcolor: 'background.paper',
       }}>
-        {/* NUEVO: Menú de respuestas rápidas */}
+        {/* Menú de respuestas rápidas */}
         <Box sx={{ mb: 1.5 }}>
           <FormControl fullWidth size="small">
             <Select
