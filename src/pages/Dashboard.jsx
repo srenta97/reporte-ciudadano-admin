@@ -1,49 +1,58 @@
 // src/pages/Dashboard.jsx
 import React, { useState, useMemo } from 'react'
 import {
-  Box, Grid, Card, CardContent, Typography, Divider, Skeleton, alpha
+  Box, Grid, Card, CardContent, Typography, Skeleton,
+  Accordion, AccordionSummary, AccordionDetails
 } from '@mui/material'
 import ReportIcon       from '@mui/icons-material/Assessment'
 import CheckIcon        from '@mui/icons-material/CheckCircleOutline'
 import PendingIcon      from '@mui/icons-material/HourglassEmpty'
 import NewIcon          from '@mui/icons-material/FiberNew'
+import ExpandMoreIcon   from '@mui/icons-material/ExpandMore'
+
 import StatCard         from '@/components/ui/StatCard'
 import FiltroTemporal   from '@/components/ui/FiltroTemporal'
 import PieCategoria     from '@/components/charts/PieCategoria'
 import BarTemporal      from '@/components/charts/BarTemporal'
 import PieEstatus       from '@/components/charts/PieEstatus'
 import ChartDeltaBacklog from '@/components/charts/ChartDeltaBacklog'
-import PieSector        from '@/components/charts/PieSector' // <-- IMPORTACIÓN NUEVA
-import BarSectorCategoria from '@/components/charts/BarSectorCategoria' // <-- IMPORTACIÓN NUEVA
+import PieSector        from '@/components/charts/PieSector' 
+import BarSectorCategoria from '@/components/charts/BarSectorCategoria' 
 import { useReportes }  from '@/hooks/useReportes'
 import { useMunicipio } from '@/contexts/MunicipioContext'
-import { CATEGORIAS }   from '@/config/categorias'
-
+import { CATEGORIAS, getCategoriasPorArea } from '@/config/categorias'
 
 export default function Dashboard() {
   const [filtro, setFiltro]     = useState('mes')
   const { municipio }           = useMunicipio()
-  const { reportes, loading, stats } = useReportes(filtro)
+  const { reportes, loading }   = useReportes(filtro)
 
-  // Modificamos el useMemo para incluir el cálculo de "porSector"
-  const { total, porCategoria, porEstatus, porSector } = useMemo(() => {
+  // 1. Cálculos generales y totales por Área
+  const { total, porCategoria, porEstatus, porSector, porArea } = useMemo(() => {
     if (loading || !reportes.length) {
-      return { total: 0, porCategoria: {}, porEstatus: {}, porSector: {} }
+      return { total: 0, porCategoria: {}, porEstatus: {}, porSector: {}, porArea: {} }
     }
     const porCategoria = {}
     const porEstatus   = {}
     const porSector    = {}
+    const porArea      = {} 
+
+    // Mapa auxiliar para encontrar el área de una categoría rápidamente
+    const areaMap = {}
+    CATEGORIAS.forEach(c => { areaMap[c.firestoreValue] = c.area })
 
     reportes.forEach(r => {
       const cat = r.categoria || 'Otro'
       const est = r.estatus   || 'Nuevo'
       const sect = r.sector && r.sector !== "Sin asignar" ? r.sector : 'No clasificado'
+      const area = areaMap[cat] || 'Sin clasificar'
       
       porCategoria[cat] = (porCategoria[cat] || 0) + 1
       porEstatus[est]   = (porEstatus[est]   || 0) + 1
       porSector[sect]   = (porSector[sect]   || 0) + 1
+      porArea[area]     = (porArea[area]     || 0) + 1 
     })
-    return { total: reportes.length, porCategoria, porEstatus, porSector }
+    return { total: reportes.length, porCategoria, porEstatus, porSector, porArea }
   }, [reportes, loading])
 
   const nuevos      = porEstatus['Nuevo']      ?? 0
@@ -53,6 +62,7 @@ export default function Dashboard() {
 
   const diasFiltro = { dia: 1, semana: 7, mes: 30, anio: 365, todos: 30 }
 
+  // 2. Cálculo de Estatus por Categoría
   const estatusPorCategoria = useMemo(() => {
     const resultado = {}
 
@@ -68,6 +78,9 @@ export default function Dashboard() {
 
     return resultado
   }, [reportes])
+
+  // Obtenemos las categorías agrupadas
+  const categoriasAgrupadas = getCategoriasPorArea()
 
   return (
     <Box>
@@ -96,16 +109,16 @@ export default function Dashboard() {
         ))}
       </Grid>
 
-      {/* Gráficas principales originales */}
+      {/* Gráficas principales */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={12} md={5}>
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ p: 2.5 }}>
               <Typography variant="h6" fontWeight={600} mb={0.5}>
-                Reportes por categoría
+                Reportes por tipo de incidencia
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Distribución según orden de prioridad oficial
+                Distribución general de todos los reportes recibidos
               </Typography>
               <Box sx={{ mt: 2 }}>
                 <PieCategoria porCategoria={porCategoria} loading={loading} height={280} />
@@ -131,11 +144,9 @@ export default function Dashboard() {
         </Grid>
       </Grid>
 
-      {/* NUEVA SECCIÓN DE INTELIGENCIA: SECTORES */}
+      {/* Inteligencia Geográfica: Sectores */}
       <Box sx={{ mb: 3, mt: 4 }}>
-        
         <Grid container spacing={2}>
-          {/* Gráfico Dona de Sectores */}
           <Grid item xs={12} md={4}>
             <Card sx={{ height: '100%' }}>
               <CardContent sx={{ p: 2.5 }}>
@@ -150,7 +161,6 @@ export default function Dashboard() {
             </Card>
           </Grid>
 
-          {/* Gráfico Barras Cruzado (Sector vs Categoría) */}
           <Grid item xs={12} md={8}>
             <Card sx={{ height: '100%' }}>
               <CardContent sx={{ p: 2.5 }}>
@@ -187,77 +197,129 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Tabla de categorías */}
-      <Card>
+      {/* SECCIÓN COMBINADA: Gestión Operativa por Área (Desglose y Estatus) */}
+      <Card sx={{ mb: 3 }}>
         <CardContent sx={{ p: 2.5 }}>
-          <Typography variant="h6" fontWeight={600} mb={2}>
-            Desglose por categoría
+          <Typography variant="h6" fontWeight={600} mb={0.5}>
+            Gestión Operativa por Área
           </Typography>
+          <Typography variant="caption" color="text.secondary" display="block" mb={3}>
+            Desglose de incidencias y estatus actual agrupado por departamento.
+          </Typography>
+          
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            {CATEGORIAS.map(cat => {
-              const count = porCategoria[cat.firestoreValue] ?? 0
-              const pct   = total > 0 ? (count / total) * 100 : 0
+            {Object.entries(categoriasAgrupadas).map(([area, cats]) => {
+              const totalArea = porArea[area] || 0
+              const pctArea = total > 0 ? (totalArea / total) * 100 : 0
+              
+              // No mostrar áreas sin reportes para no saturar la vista
+              if(totalArea === 0 && !loading) return null;
+
               return (
-                <Box key={cat.id}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography sx={{ fontSize: 16 }}>{cat.emoji}</Typography>
-                      <Typography variant="body2" fontWeight={500}>{cat.label}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <Typography variant="body2" color="text.secondary">{pct.toFixed(1)}%</Typography>
-                      <Typography variant="body2" fontWeight={600} sx={{ minWidth: 28, textAlign: 'right' }}>
-                        {loading ? <Skeleton width={24} /> : count}
+                <Accordion 
+                  key={area} 
+                  disableGutters 
+                  elevation={0} 
+                  sx={{ 
+                    border: '1px solid', 
+                    borderColor: 'divider', 
+                    borderRadius: 2,
+                    '&:before': { display: 'none' }, // Quita la línea separadora por defecto de MUI
+                    overflow: 'hidden'
+                  }}
+                >
+                  <AccordionSummary 
+                    expandIcon={<ExpandMoreIcon />}
+                    sx={{ bgcolor: 'background.default' }}
+                  >
+                    {/* Cabecera del Departamento unificada */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', pr: 2 }}>
+                      <Typography variant="subtitle1" fontWeight={700} color="primary.main">
+                        {area}
+                      </Typography>
+                      <Typography variant="subtitle2" fontWeight={600} color="text.secondary">
+                        {loading ? <Skeleton width={40} /> : totalArea} reportes ({pctArea.toFixed(1)}%)
                       </Typography>
                     </Box>
-                  </Box>
-                  <Box sx={{ height: 6, bgcolor: 'action.hover', borderRadius: 3, overflow: 'hidden' }}>
-                    <Box sx={{
-                      height: '100%', borderRadius: 3,
-                      bgcolor: cat.color,
-                      width: loading ? '0%' : `${pct}%`,
-                      transition: 'width 0.6s ease',
-                    }} />
-                  </Box>
-                </Box>
+                  </AccordionSummary>
+
+                  <AccordionDetails sx={{ pt: 3, pb: 3, px: 3, borderTop: '1px solid', borderColor: 'divider' }}>
+                    
+                    {/* PARTE 1: Lista de subcategorías */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 4 }}>
+                      <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11 }}>
+                        Tipos de incidencia detectados
+                      </Typography>
+                      
+                      {cats.map(cat => {
+                        const count = porCategoria[cat.firestoreValue] ?? 0
+                        
+                        // Si la categoría no tiene reportes, no la listamos para ahorrar espacio
+                        if (count === 0 && !loading) return null;
+                        
+                        const pct = totalArea > 0 ? (count / totalArea) * 100 : 0 // % relativo al área
+                        
+                        return (
+                          <Box key={`list-${cat.id}`}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography sx={{ fontSize: 16 }}>{cat.emoji}</Typography>
+                                <Typography variant="body2" fontWeight={500}>{cat.label}</Typography>
+                              </Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                <Typography variant="caption" color="text.secondary">{pct.toFixed(1)}% del área</Typography>
+                                <Typography variant="body2" fontWeight={600} sx={{ minWidth: 28, textAlign: 'right' }}>
+                                  {loading ? <Skeleton width={24} /> : count}
+                                </Typography>
+                              </Box>
+                            </Box>
+                            <Box sx={{ height: 6, bgcolor: 'action.hover', borderRadius: 3, overflow: 'hidden' }}>
+                              <Box sx={{
+                                height: '100%', borderRadius: 3,
+                                bgcolor: cat.color,
+                                width: loading ? '0%' : `${pct}%`,
+                                transition: 'width 0.6s ease',
+                              }} />
+                            </Box>
+                          </Box>
+                        )
+                      })}
+                    </Box>
+
+                    {/* PARTE 2: Gráficas de Estatus */}
+                    <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, mb: 2 }}>
+                      Estatus operativo
+                    </Typography>
+                    <Grid container spacing={2}>
+                      {cats.map(cat => {
+                        const data = estatusPorCategoria[cat.firestoreValue] || {}
+                        const totalCat = (data['Nuevo'] || 0) + (data['En proceso'] || 0) + (data['Resuelto'] || 0)
+
+                        // Si la categoría no tiene estatus activos, la ocultamos
+                        if (totalCat === 0 && !loading) return null
+
+                        return (
+                          <Grid item xs={12} sm={6} md={4} lg={3} key={`chart-${cat.id}`}>
+                            <Card variant="outlined" sx={{ height: '100%', bgcolor: 'background.default' }}>
+                              <CardContent sx={{ p: 2 }}>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {cat.emoji} {cat.label}
+                                </Typography>
+                                <Box sx={{ mt: 1 }}>
+                                  <PieEstatus data={data} loading={loading} height={180} />
+                                </Box>
+                              </CardContent>
+                            </Card>
+                          </Grid>
+                        )
+                      })}
+                    </Grid>
+
+                  </AccordionDetails>
+                </Accordion>
               )
             })}
           </Box>
-        </CardContent>
-      </Card>
-
-      {/* Gráficas de Estatus por Categoría */}
-      <Card sx={{ mt: 3 }}>
-        <CardContent sx={{ p: 2.5 }}>
-          <Typography variant="h6" fontWeight={600} mb={0.5}>
-            Estatus por categoría
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Distribución de estatus dentro de cada tipo de reporte
-          </Typography>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            {CATEGORIAS.map(cat => {
-              const data = estatusPorCategoria[cat.firestoreValue] || {}
-              const totalCat = (data['Nuevo'] || 0) + (data['En proceso'] || 0) + (data['Resuelto'] || 0)
-
-              if (totalCat === 0) return null
-
-              return (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={cat.id}>
-                  <Card variant="outlined">
-                    <CardContent sx={{ p: 2 }}>
-                      <Typography variant="body2" fontWeight={600}>
-                        {cat.emoji} {cat.label}
-                      </Typography>
-                      <Box sx={{ mt: 1 }}>
-                        <PieEstatus data={data} loading={loading} height={180} />
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              )
-            })}
-          </Grid>
         </CardContent>
       </Card>
     </Box>

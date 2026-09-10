@@ -14,17 +14,17 @@ import AssessmentIcon    from '@mui/icons-material/Assessment'
 import PendingIcon       from '@mui/icons-material/HourglassEmpty'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import CategoryIcon      from '@mui/icons-material/Category'
-import RoomIcon          from '@mui/icons-material/Room' // Ícono para Sectores
-import EngineeringIcon   from '@mui/icons-material/Engineering' // Ícono para Operadores
+import RoomIcon          from '@mui/icons-material/Room' 
+import EngineeringIcon   from '@mui/icons-material/Engineering' 
 import AssignmentIcon    from '@mui/icons-material/Assignment'
 
 import { useReportes }   from '@/hooks/useReportes'
 import { useMunicipio }  from '@/contexts/MunicipioContext'
-import { useUsuarios }   from '@/hooks/useUsuarios' // Catálogo para nombres completos
-import { CATEGORIAS, CATEGORIA_MAP, ESTATUS_MAP } from '@/config/categorias'
+import { useUsuarios }   from '@/hooks/useUsuarios' 
+// IMPORTANTE: Asegúrate de importar AREAS_ADMINISTRACION
+import { CATEGORIAS, CATEGORIA_MAP, ESTATUS_MAP, AREAS_ADMINISTRACION } from '@/config/categorias'
 import { format } from 'date-fns'
 
-// Firebase para cargar los sectores disponibles
 import { collection, getDocs } from 'firebase/firestore'
 import { db } from '@/config/firebase'
 
@@ -43,7 +43,7 @@ const TIPOS_REPORTE = [
   {
     id: 'general',
     titulo: 'Reporte general',
-    desc: 'Todos los reportes con filtros de período, categoría, estatus y sector.',
+    desc: 'Todos los reportes con filtros de período, área, categoría, estatus y sector.',
     icon: <AssessmentIcon />,
     color: '#1565C0',
     soporta: ['pdf','excel','csv'],
@@ -51,7 +51,7 @@ const TIPOS_REPORTE = [
   {
     id: 'categorias',
     titulo: 'Resumen por categoría',
-    desc: 'Conteos y porcentajes agrupados por cada categoría de incidencia.',
+    desc: 'Conteos y porcentajes agrupados por cada área y categoría de incidencia.',
     icon: <CategoryIcon />,
     color: '#7C3AED',
     soporta: ['pdf','excel'],
@@ -124,7 +124,7 @@ function TipoReporteCard({ tipo, seleccionado, onClick }) {
       onClick={onClick}
       sx={{
         cursor: 'pointer',
-        flexShrink: 0, // <--- CORRECCIÓN 1: Evita que la tarjeta se aplaste
+        flexShrink: 0,
         border: '1.5px solid',
         borderColor: seleccionado ? tipo.color : 'divider',
         bgcolor: seleccionado ? `${tipo.color}08` : 'background.paper',
@@ -142,7 +142,7 @@ function TipoReporteCard({ tipo, seleccionado, onClick }) {
           }}>
             {tipo.icon}
           </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}> {/* <--- CORRECCIÓN 2: minWidth 0 para envolver texto */}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="body2" fontWeight={700} sx={{ color: seleccionado ? tipo.color : 'text.primary', lineHeight: 1.2 }}>
               {tipo.titulo}
             </Typography>
@@ -183,7 +183,7 @@ function VistaPrevia({ reportes, loading }) {
           <TableHead>
             <TableRow>
               <TableCell sx={{ fontSize: 11, fontWeight: 700 }}>Folio</TableCell>
-              <TableCell sx={{ fontSize: 11, fontWeight: 700 }}>Categoría</TableCell>
+              <TableCell sx={{ fontSize: 11, fontWeight: 700 }}>Área / Categoría</TableCell>
               <TableCell sx={{ fontSize: 11, fontWeight: 700 }}>Sector</TableCell>
               <TableCell sx={{ fontSize: 11, fontWeight: 700 }}>Fecha</TableCell>
               <TableCell sx={{ fontSize: 11, fontWeight: 700 }}>Estatus</TableCell>
@@ -195,8 +195,11 @@ function VistaPrevia({ reportes, loading }) {
               return (
                 <TableRow key={r.id} hover>
                   <TableCell sx={{ fontFamily: 'monospace', fontSize: 11, color: 'text.secondary' }}>{r.folio ?? '—'}</TableCell>
-                  <TableCell><Typography variant="caption">{cat ? `${cat.emoji} ${cat.label}` : r.categoria ?? '—'}</Typography></TableCell>
-                  <TableCell><Typography variant="caption" color={r.sector === 'Sin asignar' ? 'text.disabled' : 'primary.main'} fontWeight={600}>{r.sector || 'Sin asignar'}</Typography></TableCell>
+                  <TableCell>
+                    <Typography variant="caption" display="block" color="primary.main" fontWeight={600}>{cat?.area || 'Sin área'}</Typography>
+                    <Typography variant="caption" color="text.secondary">{cat ? `${cat.emoji} ${cat.label}` : r.categoria ?? '—'}</Typography>
+                  </TableCell>
+                  <TableCell><Typography variant="caption" color={r.sector === 'Sin asignar' ? 'text.disabled' : 'text.primary'} fontWeight={500}>{r.sector || 'Sin asignar'}</Typography></TableCell>
                   <TableCell><Typography variant="caption" color="text.secondary">{r.fecha_legible ?? '—'}</Typography></TableCell>
                   <TableCell><MiniEstatusChip value={r.estatus} /></TableCell>
                 </TableRow>
@@ -212,15 +215,16 @@ function VistaPrevia({ reportes, loading }) {
 // ── Página principal ──────────────────────────────────────────
 export default function Reportes() {
   const { municipio }             = useMunicipio()
-  const { usuarios }              = useUsuarios() // Catálogo de usuarios
+  const { usuarios }              = useUsuarios() 
   const [zonas, setZonas]         = useState([])
 
-  const [tipoId,    setTipoId]    = useState('general')
-  const [periodo,   setPeriodo]   = useState('mes')
-  const [catFiltro, setCatFiltro] = useState('')
-  const [estFiltro, setEstFiltro] = useState('')
-  const [secFiltro, setSecFiltro] = useState('')
-  const [mesAnio,   setMesAnio]   = useState(format(new Date(), 'yyyy-MM'))
+  const [tipoId,     setTipoId]     = useState('general')
+  const [periodo,    setPeriodo]    = useState('mes')
+  const [areaFiltro, setAreaFiltro] = useState('') // NUEVO: Estado para Área
+  const [catFiltro,  setCatFiltro]  = useState('')
+  const [estFiltro,  setEstFiltro]  = useState('')
+  const [secFiltro,  setSecFiltro]  = useState('')
+  const [mesAnio,    setMesAnio]    = useState(format(new Date(), 'yyyy-MM'))
   
   const [generando, setGenerando] = useState(null)
   const [errorMsg,  setErrorMsg]  = useState('')
@@ -239,9 +243,17 @@ export default function Reportes() {
     fetchZonas()
   }, [])
 
-  // Filtrado General
+  // NUEVO: Opciones de categoría dinámicas según el área seleccionada
+  const categoriasDropdown = useMemo(() => {
+    if (!areaFiltro) return CATEGORIAS
+    return CATEGORIAS.filter(c => c.area === areaFiltro)
+  }, [areaFiltro])
+
+  // Filtrado General Actualizado
   const reportesFiltrados = useMemo(() => {
     let r = reportes
+    // Filtrar por Área usando el mapa de categorías
+    if (areaFiltro) r = r.filter(x => CATEGORIA_MAP[x.categoria]?.area === areaFiltro)
     if (catFiltro) r = r.filter(x => x.categoria === catFiltro)
     if (estFiltro) r = r.filter(x => (x.estatus ?? 'Nuevo') === estFiltro)
     if (secFiltro) r = r.filter(x => x.sector === secFiltro)
@@ -254,7 +266,7 @@ export default function Reportes() {
       })
     }
     return r
-  }, [reportes, catFiltro, estFiltro, secFiltro, tipoId, mesAnio])
+  }, [reportes, areaFiltro, catFiltro, estFiltro, secFiltro, tipoId, mesAnio])
 
   // Procesamiento para Reporte de Categorías
   const porCategoria = useMemo(() => {
@@ -316,7 +328,8 @@ export default function Reportes() {
     setGenerando(formato)
     try {
       const [anioStr, mesStr] = mesAnio.split('-')
-      const filtros = { periodo: periodoLabel, categoria: catFiltro || null, estatus: estFiltro || null }
+      // NUEVO: Agregamos el área a los filtros que se pasan al PDF
+      const filtros = { periodo: periodoLabel, area: areaFiltro || null, categoria: catFiltro || null, estatus: estFiltro || null }
       
       if (formato === 'pdf') {
         if (tipoId === 'general')    exportarReporteGeneral(reportesFiltrados, filtros, municipio)
@@ -366,7 +379,6 @@ export default function Reportes() {
                 <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
                   1. Tipo de reporte
                 </Typography>
-                {/* Aumento a maxHeight 480 para que la lista no se vea tan ajustada */}
                 <Stack spacing={1.5} sx={{ maxHeight: 480, overflowY: 'auto', pr: 1, pb: 1 }}>
                   {TIPOS_REPORTE.map(t => (
                     <TipoReporteCard key={t.id} tipo={t} seleccionado={tipoId === t.id} onClick={() => setTipoId(t.id)} />
@@ -411,12 +423,37 @@ export default function Reportes() {
                     </FormControl>
                   )}
 
+                  {/* NUEVO: Filtro en cascada de Área */}
+                  {['general', 'categorias'].includes(tipoId) && (
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Área o Depto</InputLabel>
+                      <Select 
+                        value={areaFiltro} 
+                        onChange={e => {
+                          setAreaFiltro(e.target.value)
+                          setCatFiltro('') // Limpiamos la categoría al cambiar de área
+                        }} 
+                        label="Área o Depto"
+                      >
+                        <MenuItem value="">Todas las áreas</MenuItem>
+                        {Object.values(AREAS_ADMINISTRACION).map(area => (
+                          <MenuItem key={area} value={area}>{area}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+
                   {['general'].includes(tipoId) && (
                     <FormControl fullWidth size="small">
                       <InputLabel>Categoría</InputLabel>
-                      <Select value={catFiltro} onChange={e => setCatFiltro(e.target.value)} label="Categoría">
+                      <Select 
+                        value={catFiltro} 
+                        onChange={e => setCatFiltro(e.target.value)} 
+                        label="Categoría"
+                        disabled={areaFiltro && categoriasDropdown.length === 0}
+                      >
                         <MenuItem value="">Todas</MenuItem>
-                        {CATEGORIAS.map(c => (
+                        {categoriasDropdown.map(c => (
                           <MenuItem key={c.id} value={c.firestoreValue}>{c.emoji} {c.label}</MenuItem>
                         ))}
                       </Select>
@@ -495,19 +532,38 @@ export default function Reportes() {
               {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={28} /></Box>
               ) : tipoId === 'categorias' ? (
-                <Stack spacing={1.5}>
-                  {porCategoria.map(cat => (
-                    <Box key={cat.id}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                        <Typography variant="body2">{cat.emoji} {cat.label}</Typography>
-                        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-                          <Typography variant="caption" color="text.secondary">{cat.porcentaje}%</Typography>
-                          <Typography variant="body2" fontWeight={700}>{cat.cantidad}</Typography>
+                // NUEVO: Agrupación visual por Área en la vista previa
+                <Stack spacing={3}>
+                  {Object.entries(AREAS_ADMINISTRACION).map(([key, areaNombre]) => {
+                    const catsEnArea = porCategoria.filter(c => c.area === areaNombre);
+                    if (catsEnArea.length === 0) return null;
+                    
+                    const totalArea = catsEnArea.reduce((sum, c) => sum + c.cantidad, 0);
+                    const pctArea = reportesFiltrados.length > 0 ? ((totalArea / reportesFiltrados.length) * 100).toFixed(1) : '0';
+
+                    return (
+                      <Box key={areaNombre}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, borderBottom: '1px solid', borderColor: 'divider', pb: 0.5 }}>
+                          <Typography variant="subtitle2" fontWeight={700} color="primary.main">{areaNombre}</Typography>
+                          <Typography variant="caption" fontWeight={600} color="text.secondary">{totalArea} reportes ({pctArea}%)</Typography>
                         </Box>
+                        <Stack spacing={1.5}>
+                          {catsEnArea.map(cat => (
+                            <Box key={cat.id}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                <Typography variant="body2">{cat.emoji} {cat.label}</Typography>
+                                <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+                                  <Typography variant="caption" color="text.secondary">{cat.porcentaje}%</Typography>
+                                  <Typography variant="body2" fontWeight={700}>{cat.cantidad}</Typography>
+                                </Box>
+                              </Box>
+                              <LinearProgress variant="determinate" value={Number(cat.porcentaje)} sx={{ height: 6, borderRadius: 3, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { bgcolor: cat.color } }} />
+                            </Box>
+                          ))}
+                        </Stack>
                       </Box>
-                      <LinearProgress variant="determinate" value={Number(cat.porcentaje)} sx={{ height: 6, borderRadius: 3, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { bgcolor: cat.color } }} />
-                    </Box>
-                  ))}
+                    )
+                  })}
                 </Stack>
               ) : tipoId === 'sectores' ? (
                 <Stack spacing={1.5}>

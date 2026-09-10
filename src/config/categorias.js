@@ -4,6 +4,18 @@
 // El orden aquí es el orden oficial definido por el municipio.
 // ─────────────────────────────────────────────────────────────
 
+// ── Áreas de Administración (NUEVO) ──────────────────────────
+export const AREAS_ADMINISTRACION = {
+  ALUMBRADO: 'Alumbrado Público',
+  AGUA: 'Gestión del Agua',
+  OBRAS: 'Obras Públicas',
+  SEGURIDAD: 'Seguridad Pública',
+  FUNDACION: 'Fundación',
+  PROTECCION_CIVIL: 'Protección Civil',
+  SERVICIOS_PUBLICOS: 'Servicios Públicos', // Sugerido para Basura
+  INSPECCION: 'Reglamentos e Inspección'    // Sugerido para Negocios
+};
+
 export const CATEGORIAS = [
   {
     id:      'lamparas',
@@ -13,6 +25,7 @@ export const CATEGORIAS = [
     chipBg:  '#FEF3C7',
     chipTxt: '#92400E',
     firestoreValue: 'Lámparas',
+    area: AREAS_ADMINISTRACION.ALUMBRADO, // NUEVO
   },
   {
     id:      'agua_potable',
@@ -22,6 +35,7 @@ export const CATEGORIAS = [
     chipBg:  '#CFFAFE',
     chipTxt: '#155E75',
     firestoreValue: 'Agua Potable',
+    area: AREAS_ADMINISTRACION.AGUA, // NUEVO
   },
   {
     id:      'drenaje',
@@ -31,6 +45,7 @@ export const CATEGORIAS = [
     chipBg:  '#CCFBF1',
     chipTxt: '#115E59',
     firestoreValue: 'Drenaje y Aguas Negras',
+    area: AREAS_ADMINISTRACION.AGUA, // NUEVO
   },
   {
     id:      'basura',
@@ -40,6 +55,7 @@ export const CATEGORIAS = [
     chipBg:  '#FEE2E2',
     chipTxt: '#991B1B',
     firestoreValue: 'Basura',
+    area: AREAS_ADMINISTRACION.SERVICIOS_PUBLICOS, // NUEVO
   },
   {
     id:      'baches',
@@ -49,6 +65,7 @@ export const CATEGORIAS = [
     chipBg:  '#F3F4F6',
     chipTxt: '#374151',
     firestoreValue: 'Baches',
+    area: AREAS_ADMINISTRACION.OBRAS, // NUEVO
   },
   {
     id:      'ruido',
@@ -58,6 +75,7 @@ export const CATEGORIAS = [
     chipBg:  '#EDE9FE',
     chipTxt: '#5B21B6',
     firestoreValue: 'Ruido excesivo',
+    area: AREAS_ADMINISTRACION.SEGURIDAD, // NUEVO
   },
   {
     id:      'objetos',
@@ -67,6 +85,7 @@ export const CATEGORIAS = [
     chipBg:  '#FFEDD5',
     chipTxt: '#9A3412',
     firestoreValue: 'Retiro de objetos en vía pública',
+    area: AREAS_ADMINISTRACION.SEGURIDAD, // NUEVO
   },
   {
     id:      'negocios',
@@ -76,6 +95,7 @@ export const CATEGORIAS = [
     chipBg:  '#E0F2FE',
     chipTxt: '#0C4A6E',
     firestoreValue: 'Inspección a negocios/comercios',
+    area: AREAS_ADMINISTRACION.INSPECCION, // NUEVO
   },
   {
     id:      'animales',
@@ -85,6 +105,7 @@ export const CATEGORIAS = [
     chipBg:  '#D1FAE5',
     chipTxt: '#065F46',
     firestoreValue: 'Animales',
+    area: AREAS_ADMINISTRACION.FUNDACION, // NUEVO
   },
   {
     id:      'autos',
@@ -94,6 +115,7 @@ export const CATEGORIAS = [
     chipBg:  '#DBEAFE',
     chipTxt: '#1E3A8A',
     firestoreValue: 'Autos mal estacionados',
+    area: AREAS_ADMINISTRACION.SEGURIDAD, // NUEVO
   },
   {
     id:      'arbolado',
@@ -103,6 +125,7 @@ export const CATEGORIAS = [
     chipBg:  '#DCFCE7',
     chipTxt: '#14532D',
     firestoreValue: 'Arbolado',
+    area: AREAS_ADMINISTRACION.PROTECCION_CIVIL, // NUEVO
   },
   {
     id:      'otro',
@@ -112,8 +135,18 @@ export const CATEGORIAS = [
     chipBg:  '#F1F5F9',
     chipTxt: '#334155',
     firestoreValue: 'Otro',
+    area: AREAS_ADMINISTRACION.PROTECCION_CIVIL, // NUEVO
   },
 ]
+
+// ── Función helper para agrupar en el UI (NUEVO) ──────────────
+export const getCategoriasPorArea = () => {
+  return CATEGORIAS.reduce((acc, cat) => {
+    if (!acc[cat.area]) acc[cat.area] = [];
+    acc[cat.area].push(cat);
+    return acc;
+  }, {});
+};
 
 // ── Subtipos integrados ──────────────────────────────────────
 export const SUBTIPOS = {
