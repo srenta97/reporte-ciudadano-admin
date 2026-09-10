@@ -1,545 +1,525 @@
-// src/components/tickets/TicketDetalle.jsx
-// ─────────────────────────────────────────────────────────────
-// Drawer lateral que muestra el detalle completo de un reporte,
-// permite cambiar estatus, prioridad, agregar notas y asignar
-// a un operador (solo admin).
-// ─────────────────────────────────────────────────────────────
-import React, { useState, useRef, useEffect } from 'react'
+// src/components/tickets/OrdenesTrabajo.jsx
+import React, { useState, useMemo } from 'react'
 import {
-  Drawer, Box, Typography, Divider, Chip, Stack, IconButton,
-  Button, TextField, Select, MenuItem, FormControl, InputLabel,
-  Avatar, Tooltip, CircularProgress, Accordion, AccordionSummary, 
-  AccordionDetails, alpha, useTheme
+  Box, Card, CardContent, Typography, Stack, Chip,
+  Tooltip, ToggleButtonGroup, ToggleButton,
+  TextField, InputAdornment, FormControl, InputLabel, Select,
+  MenuItem, Divider, CircularProgress, Alert, Button,
+  Table, TableBody, TableCell, TableContainer, TableHead,
+  TableRow, Tabs, Tab, useTheme, useMediaQuery,
+  alpha, Accordion, AccordionSummary, AccordionDetails
 } from '@mui/material'
-import CloseIcon           from '@mui/icons-material/Close'
-import SendIcon            from '@mui/icons-material/Send'
-import EditNoteIcon        from '@mui/icons-material/EditNote'
-import SwapHorizIcon       from '@mui/icons-material/SwapHoriz'
-import PersonIcon          from '@mui/icons-material/PersonOutline'
-import FlagIcon            from '@mui/icons-material/Flag'
-import OpenInNewIcon       from '@mui/icons-material/OpenInNew'
-import ContentPasteIcon    from '@mui/icons-material/ContentPaste'
-import PictureAsPdfIcon    from '@mui/icons-material/PictureAsPdf'
-import ExpandMoreIcon      from '@mui/icons-material/ExpandMore'
-import InfoOutlinedIcon    from '@mui/icons-material/InfoOutlined'
-import TuneIcon            from '@mui/icons-material/Tune'
-import ForumOutlinedIcon   from '@mui/icons-material/ForumOutlined'
-import RoomIcon            from '@mui/icons-material/Room' // <-- NUEVO: Ícono para el sector
-import { format }          from 'date-fns'
-import { es }              from 'date-fns/locale'
-import { exportarFichaIndividual } from '@/utils/exportPDF'
-import { CATEGORIA_MAP, ESTATUS, ESTATUS_MAP } from '@/config/categorias'
-import { PRIORIDADES, PRIORIDAD_MAP }          from '@/hooks/useOrdenesTrabajo'
-import { useAuth }         from '@/contexts/AuthContext'
-import { useMunicipio }    from '@/contexts/MunicipioContext'
-import { useUsuarios }     from '@/hooks/useUsuarios'
+import ViewKanbanIcon from '@mui/icons-material/ViewKanban'
+import ViewListIcon from '@mui/icons-material/ViewList'
+import SearchIcon from '@mui/icons-material/Search'
+import TuneIcon from '@mui/icons-material/Tune'
+import FlagIcon from '@mui/icons-material/Flag'
+import AssignmentIcon from '@mui/icons-material/Assignment'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import PendingIcon from '@mui/icons-material/HourglassEmpty'
+import NewReleasesIcon from '@mui/icons-material/NewReleases'
+import InboxIcon from '@mui/icons-material/Inbox'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 
-const DRAWER_WIDTH = 480
+import { useOrdenesTrabajo, COLUMNAS_KANBAN, PRIORIDADES, PRIORIDAD_MAP } from '@/hooks/useOrdenesTrabajo'
+import { useMunicipio } from '@/contexts/MunicipioContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { CATEGORIAS, CATEGORIA_MAP, ESTATUS_MAP, AREAS_ADMINISTRACION } from '@/config/categorias'
+import TicketCard from '@/components/tickets/TicketCard'
+import TicketDetalle from '@/components/tickets/TicketDetalle'
+import FiltroTemporal from '@/components/ui/FiltroTemporal'
+import { useCrearNotificacion } from '@/hooks/useCrearNotificacion'
+import { useSearchParams } from 'react-router-dom'
+import { useUsuarios } from '@/hooks/useUsuarios'
 
-// ── Plantillas de respuestas rápidas ─────────────────────────
-const PLANTILLAS_RESPUESTA = [
-  "Se giró orden de trabajo al área correspondiente.",
-  "En espera de material para reparación.",
-  "El reporte ha sido canalizado a Obras Públicas.",
-  "Cuadrilla en camino al lugar del reporte.",
-  "Reporte atendido y solucionado satisfactoriamente.",
-  "Se requiere mayor información para proceder. Favor de contactar al ciudadano."
-]
-
-// ── Helpers visuales ──────────────────────────────────────────
-function EstatusChip({ value }) {
-  const e = ESTATUS_MAP[value] ?? ESTATUS_MAP['Nuevo']
-  return <Chip label={value ?? 'Nuevo'} size="small"
-    sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: e.bg, color: e.color }} />
+// ── Tarjetas Estadísticas Superiores ───────────────────────────────────────────
+function MiniStat({ label, value, color, icon, loading, subtitle }) {
+  return (
+    <Card
+      variant="outlined"
+      sx={{
+        flex: 1, minWidth: { xs: 'calc(50% - 8px)', sm: 220 }, borderRadius: 3,
+        borderColor: alpha(color, 0.18), bgcolor: 'background.paper', boxShadow: 'none',
+        transition: 'transform .2s ease, box-shadow .2s ease, border-color .2s ease',
+        '&:hover': { transform: 'translateY(-2px)', boxShadow: `0 12px 30px ${alpha(color, 0.08)}`, borderColor: alpha(color, 0.3) },
+      }}
+    >
+      <CardContent sx={{ p: 2.25, '&:last-child': { pb: 2.25 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, fontWeight: 700 }}>
+              {label}
+            </Typography>
+            <Typography variant="h4" fontWeight={800} sx={{ lineHeight: 1, mt: 0.5 }}>
+              {loading ? '—' : value}
+            </Typography>
+            {subtitle && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>{subtitle}</Typography>}
+          </Box>
+          <Box sx={{ width: 44, height: 44, borderRadius: 2.5, bgcolor: alpha(color, 0.12), color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, '& svg': { fontSize: 22 } }}>
+            {icon}
+          </Box>
+        </Box>
+      </CardContent>
+    </Card>
+  )
 }
 
-function PrioridadChip({ value }) {
-  if (!value) return null
-  const p = PRIORIDAD_MAP[value]
-  if (!p) return null
-  return <Chip icon={<FlagIcon style={{ fontSize: 13, color: p.color }} />}
-    label={p.label} size="small"
-    sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: p.bg, color: p.color }} />
-}
+// ── Columna Kanban (Agrupa por área automáticamente si corresponde) ────────────
+function KanbanColumna({ columna, tickets, onTicketClick, loading }) {
+  // Identificamos si esta columna debe usar acordeones
+  const usarAcordeones = columna.estatus?.some(e => 
+    ['Nuevo', 'En proceso', 'Resuelto', 'Cerrado'].includes(e)
+  );
 
-function safeDate(r) {
-  try {
-    const d = r.fecha instanceof Date ? r.fecha : new Date(r.fecha_iso)
-    return format(d, "d 'de' MMMM yyyy 'a las' HH:mm", { locale: es })
-  } catch { return r.fecha_legible ?? '—' }
-}
-
-function safeDateShort(ts) {
-  try {
-    const d = ts?.toDate ? ts.toDate() : new Date(ts)
-    return format(d, "d MMM, HH:mm", { locale: es })
-  } catch { return '' }
-}
-
-// ── Ícono de entrada de actividad ────────────────────────────
-function TipoIcon({ tipo }) {
-  const props = { style: { fontSize: 13 } }
-  if (tipo === 'estatus')    return <SwapHorizIcon {...props} />
-  if (tipo === 'asignacion') return <PersonIcon    {...props} />
-  if (tipo === 'prioridad')  return <FlagIcon      {...props} />
-  return <EditNoteIcon {...props} />
-}
-
-function colorTipo(tipo) {
-  if (tipo === 'estatus')    return '#3B82F6'
-  if (tipo === 'asignacion') return '#7C3AED'
-  if (tipo === 'prioridad')  return '#D97706'
-  return '#64748B'
-}
-
-// ── Componente principal ──────────────────────────────────────
-export default function TicketDetalle({
-  reporte, open, onClose,
-  onCambiarEstatus, onCambiarPrioridad, onAgregarNota, onAsignar,
-}) {
-  const theme                 = useTheme()
-  const { esAdmin }           = useAuth()
-  const { municipio }         = useMunicipio()
-  const { usuarios }          = useUsuarios()
-
-  const [nota,          setNota]          = useState('')
-  const [guardandoNota, setGuardandoNota] = useState(false)
-  const [generandoPdf,  setGenerandoPdf]  = useState(false)
-  const [estatusLocal,  setEstatusLocal]  = useState('')
-  const [prioridadLocal,setPrioridadLocal]= useState('')
-  
-  // Refenderizado para autoscroll
-  const actividadEndRef = useRef(null)
-
-  useEffect(() => {
-    if (reporte) {
-      setEstatusLocal( reporte.estatus   ?? 'Nuevo')
-      setPrioridadLocal(reporte.prioridad ?? 'media')
-      setNota('')
-    }
-  }, [reporte?.id])
-
-  // Scroll al fondo del historial al abrirse o al enviar un nuevo mensaje
-  useEffect(() => {
-    if (open) {
-      setTimeout(() => {
-        actividadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-      }, 300)
-    }
-  }, [open, reporte?.actividad?.length])
-
-  if (!reporte) return null
-
-  const cat         = CATEGORIA_MAP[reporte.categoria]
-  const actividad   = [...(reporte.actividad ?? [])].sort((a, b) => {
-    const ta = a.fecha?.toDate?.()?.getTime() ?? 0
-    const tb = b.fecha?.toDate?.()?.getTime() ?? 0
-    return ta - tb
-  })
-  const operadores  = usuarios.filter(u => ['operador','admin'].includes(u.rol) && u.activo !== false)
-
-  const handleGuardarNota = async () => {
-    if (!nota.trim()) return
-    setGuardandoNota(true)
-    try {
-      await onAgregarNota(reporte.id, nota)
-      setNota('')
-    } finally {
-      setGuardandoNota(false)
-    }
-  }
-
-  const handleEstatusChange = async (nuevoEstatus) => {
-    setEstatusLocal(nuevoEstatus)
-    await onCambiarEstatus(reporte.id, nuevoEstatus, reporte)
-  }
-
-  const handlePrioridadChange = async (nuevaPrioridad) => {
-    setPrioridadLocal(nuevaPrioridad)
-    await onCambiarPrioridad(reporte.id, nuevaPrioridad)
-  }
-
-  const handleAsignar = async (e) => {
-    const uid = e.target.value
-    const op  = operadores.find(u => u.id === uid)
-    await onAsignar(reporte.id, uid || '', op?.nombre ?? '')
-  }
-
-  const handleDescargarPdf = async () => {
-    setGenerandoPdf(true)
-    try {
-      await exportarFichaIndividual(reporte, municipio)
-    } catch (error) {
-      console.error("Error generando PDF", error)
-    } finally {
-      setGenerandoPdf(false)
-    }
-  }
-
-  // Estilo base para los acordeones para que se vean modernos
-  const accordionStyle = {
-    boxShadow: 'none',
-    border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
-    borderRadius: '12px !important', 
-    mb: 1.5,
-    '&:before': { display: 'none' }, 
-    overflow: 'hidden'
-  }
+  // Agrupamos los tickets por Área Administrativa SOLO si cumple la condición
+  const ticketsPorArea = React.useMemo(() => {
+    if (!usarAcordeones) return [];
+    const grupos = {};
+    tickets.forEach(t => {
+      const area = CATEGORIA_MAP[t.categoria]?.area || 'Sin clasificar';
+      if (!grupos[area]) grupos[area] = [];
+      grupos[area].push(t);
+    });
+    return Object.entries(grupos).sort((a, b) => b[1].length - a[1].length);
+  }, [tickets, usarAcordeones]);
 
   return (
-    <Drawer
-      anchor="right"
-      open={open}
-      onClose={onClose}
-      PaperProps={{ sx: { width: { xs: '100vw', sm: DRAWER_WIDTH }, display: 'flex', flexDirection: 'column' } }}
+    <Box
+      sx={{
+        flex: 1, width: '100%', minWidth: { xs: '100%', md: 320 },
+        bgcolor: alpha(columna.color, 0.04), borderRadius: 4,
+        border: `1px solid ${alpha(columna.color, 0.16)}`,
+        display: 'flex', flexDirection: 'column',
+        height: { xs: '60vh', md: 'calc(100vh - 360px)' }, minHeight: 420, overflow: 'hidden',
+      }}
     >
-      {/* ── Header ───────────────────────────────────────── */}
-      <Box sx={{
-        px: 2.5, py: 2,
-        background: `linear-gradient(135deg, ${municipio.brandColor} 0%, ${municipio.brandColor}CC 100%)`,
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1,
-      }}>
-        <Box>
-          <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', fontFamily: 'monospace' }}>
-            {reporte.folio ?? '—'}
-          </Typography>
-          <Typography variant="h6" fontWeight={700} sx={{ color: 'white', lineHeight: 1.3, mt: 0.25 }}>
-            {cat ? `${cat.emoji} ${cat.label}` : reporte.categoria ?? 'Sin categoría'}
-          </Typography>
-          {reporte.subtipo && (
-            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.8)' }}>
-              {reporte.subtipo}
-            </Typography>
-          )}
-          <Stack direction="row" spacing={0.75} sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
-            <EstatusChip value={estatusLocal} />
-            <PrioridadChip value={prioridadLocal} />
-            
-            {/* NUEVO: Etiqueta visible del Sector en el encabezado superior */}
-            {reporte.sector && reporte.sector !== 'Sin asignar' && (
-              <Chip 
-                icon={<RoomIcon style={{ fontSize: 13, color: 'white' }} />}
-                label={reporte.sector} 
-                size="small"
-                sx={{ 
-                  height: 22, fontSize: 11, fontWeight: 700, 
-                  bgcolor: 'rgba(255,255,255,0.2)', color: 'white' 
-                }} 
-              />
-            )}
-          </Stack>
+      {/* Cabecera de Columna */}
+      <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${alpha(columna.color, 0.12)}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, bgcolor: alpha(columna.color, 0.05) }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: columna.color }} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle2" fontWeight={800} sx={{ color: columna.color, lineHeight: 1.2 }}>{columna.label}</Typography>
+            <Typography variant="caption" color="text.secondary">{columna.estatus?.length || 0} estados</Typography>
+          </Box>
         </Box>
-        {/* Contenedor de los botones de acción del Header */}
-        <Box sx={{ display: 'flex', gap: 0.5, mt: -0.5 }}>
-          <Tooltip title="Descargar Ficha para Imprimir (PDF)">
-            <IconButton 
-              onClick={handleDescargarPdf} 
-              disabled={generandoPdf} 
-              sx={{ color: 'white' }}
-            >
-              {generandoPdf ? <CircularProgress size={20} color="inherit" /> : <PictureAsPdfIcon />}
-            </IconButton>
-          </Tooltip>
-          <IconButton onClick={onClose} sx={{ color: 'white' }}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
+        <Chip label={loading ? '…' : tickets.length} size="small" sx={{ height: 24, fontSize: 11, fontWeight: 800, bgcolor: alpha(columna.color, 0.12), color: columna.color }} />
       </Box>
 
-      {/* ── Cuerpo con Acordeones ───────────────────────────── */}
-      {/* Usamos scroll nativo en todo el contenedor, esto arregla el problema de móviles */}
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 2, bgcolor: alpha(theme.palette.divider, 0.02) }}>
-
-        {/* 1. ACORDEÓN: Información del reporte */}
-        <Accordion defaultExpanded sx={accordionStyle}>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: 'background.paper', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.4)}` }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Box sx={{ p: 0.75, borderRadius: 1.5, bgcolor: '#EFF6FF', color: '#3B82F6', display: 'flex' }}>
-                 <InfoOutlinedIcon fontSize="small" />
-              </Box>
-              <Typography fontWeight={700} sx={{ fontSize: 14 }}>
-                Información general
-              </Typography>
-            </Box>
-          </AccordionSummary>
-          <AccordionDetails sx={{ bgcolor: 'background.paper', p: 2.5 }}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-              {[
-                { label: 'Fecha reporte', value: safeDate(reporte) },
-                // NUEVO: Agregado el Sector directamente en los datos de la cuadrícula
-                { label: 'Sector / Zona', value: reporte.sector || 'Sin asignar' },
-                { label: 'Teléfono', value: reporte.telefono ?? '—' },
-                { label: 'Foto adjunta', value: reporte.tiene_foto === 'si' ? '✅ Sí' : '❌ No' },
-              ].map(item => (
-                <Box key={item.label}>
-                  <Typography variant="caption" color="text.secondary" display="block">{item.label}</Typography>
-                  <Typography variant="body2" fontWeight={500}>{item.value}</Typography>
-                </Box>
-              ))}
-              <Box sx={{ gridColumn: '1 / -1' }}>
-                <Typography variant="caption" color="text.secondary" display="block">Ubicación</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
-                    {reporte.ubicacion || '—'}
-                  </Typography>
-                  {reporte.lat && reporte.lon && (
-                    <Tooltip title="Ver en Google Maps">
-                      <IconButton size="small"
-                        href={`https://maps.google.com/?q=$${reporte.lat},${reporte.lon}`}
-                        target="_blank" component="a" rel="noopener noreferrer">
-                        <OpenInNewIcon sx={{ fontSize: 14 }} />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                </Box>
-              </Box>
-              {reporte.descripcion && (
-                <Box sx={{ gridColumn: '1 / -1' }}>
-                  <Typography variant="caption" color="text.secondary" display="block">Descripción ciudadana</Typography>
-                  <Typography variant="body2" sx={{ mt: 0.5 }}>{reporte.descripcion}</Typography>
-                </Box>
-              )}
-            </Box>
-
-            {/* Foto */}
-            {reporte.foto_url && (
-              <Box
-                component="img" src={reporte.foto_url} alt="Evidencia"
-                sx={{ width: '100%', borderRadius: 2, mt: 2, maxHeight: 180, objectFit: 'cover', cursor: 'pointer' }}
-                onClick={() => window.open(reporte.foto_url, '_blank')}
-              />
-            )}
-          </AccordionDetails>
-        </Accordion>
-
-        {/* 2. ACORDEÓN: Gestión Operativa */}
-        <Accordion defaultExpanded sx={accordionStyle}>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: 'background.paper', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.4)}` }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Box sx={{ p: 0.75, borderRadius: 1.5, bgcolor: '#FFFBEB', color: '#D97706', display: 'flex' }}>
-                 <TuneIcon fontSize="small" />
-              </Box>
-              <Typography fontWeight={700} sx={{ fontSize: 14 }}>
-                Gestión operativa
-              </Typography>
-            </Box>
-          </AccordionSummary>
-          <AccordionDetails sx={{ bgcolor: 'background.paper', p: 2.5 }}>
-            <Stack spacing={2}>
-              {/* Estatus */}
-              <FormControl fullWidth size="small">
-                <InputLabel>Estatus actual</InputLabel>
-                <Select value={estatusLocal} onChange={e => handleEstatusChange(e.target.value)} label="Estatus actual">
-                  {ESTATUS.map(e => (
-                    <MenuItem key={e.value} value={e.value}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: e.color, flexShrink: 0 }} />
-                        {e.label}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              {/* Prioridad */}
-              <FormControl fullWidth size="small">
-                <InputLabel>Nivel de prioridad</InputLabel>
-                <Select value={prioridadLocal} onChange={e => handlePrioridadChange(e.target.value)} label="Nivel de prioridad">
-                  {PRIORIDADES.map(p => (
-                    <MenuItem key={p.value} value={p.value}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <FlagIcon sx={{ fontSize: 14, color: p.color }} />
-                        {p.label}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              {/* Asignación — solo admin */}
-              {esAdmin && (
-                <FormControl fullWidth size="small">
-                  <InputLabel>Asignar operador</InputLabel>
-                  <Select
-                    value={reporte.asignado_a ?? ''}
-                    onChange={handleAsignar}
-                    label="Asignar operador"
-                  >
-                    <MenuItem value=""><em>Sin asignar</em></MenuItem>
-                    {operadores.map(op => (
-                      <MenuItem key={op.id} value={op.id}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Avatar sx={{ width: 22, height: 22, fontSize: 10, bgcolor: municipio.brandColor }}>
-                            {(op.nombre || op.email || 'O')[0].toUpperCase()}
-                          </Avatar>
-                          {op.nombre ?? op.email}
-                          <Chip label={op.rol} size="small" sx={{ height: 16, fontSize: 9, ml: 0.5 }} />
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-
-              {/* Mostrar asignación si no es admin */}
-              {!esAdmin && reporte.asignado_nombre && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25,
-                  bgcolor: 'action.hover', borderRadius: 2 }}>
-                  <Avatar sx={{ width: 26, height: 26, fontSize: 11, bgcolor: municipio.brandColor }}>
-                    {reporte.asignado_nombre[0]?.toUpperCase()}
-                  </Avatar>
-                  <Box>
-                    <Typography variant="caption" color="text.secondary" display="block">Responsable</Typography>
-                    <Typography variant="body2" fontWeight={600}>{reporte.asignado_nombre}</Typography>
-                  </Box>
-                </Box>
-              )}
-            </Stack>
-          </AccordionDetails>
-        </Accordion>
-
-        {/* 3. ACORDEÓN: Historial de actividad */}
-        <Accordion defaultExpanded sx={accordionStyle}>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: 'background.paper', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.4)}` }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
-              <Box sx={{ p: 0.75, borderRadius: 1.5, bgcolor: '#ECFDF5', color: '#059669', display: 'flex' }}>
-                 <ForumOutlinedIcon fontSize="small" />
-              </Box>
-              <Typography fontWeight={700} sx={{ fontSize: 14 }}>
-                Historial y Notas
-              </Typography>
-              <Chip 
-                label={actividad.length} 
-                size="small" 
-                sx={{ ml: 'auto', mr: 1, height: 20, fontSize: 11, fontWeight: 700 }} 
-              />
-            </Box>
-          </AccordionSummary>
-          
-          <AccordionDetails sx={{ bgcolor: 'background.paper', p: 0 }}>
-            <Box 
+      {/* Cuerpo de Columna */}
+      <Box sx={{ flex: 1, overflow: 'auto', p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}><CircularProgress size={26} sx={{ color: columna.color }} /></Box>
+        ) : tickets.length === 0 ? (
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', py: 4, color: 'text.secondary' }}>
+            <InboxIcon sx={{ fontSize: 34, mb: 1, opacity: 0.5 }} />
+            <Typography variant="body2" fontWeight={700}>Sin reportes</Typography>
+            <Typography variant="caption" color="text.secondary">No hay tickets en esta columna</Typography>
+          </Box>
+        ) : usarAcordeones ? (
+          // RENDERIZADO CON ACORDEONES
+          ticketsPorArea.map(([area, tcks]) => (
+            <Accordion 
+              key={area} defaultExpanded disableGutters elevation={0} 
               sx={{ 
-                maxHeight: { xs: 300, sm: 400 }, 
-                overflowY: 'auto', 
-                p: 2.5,
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: 2 
+                bgcolor: 'transparent', 
+                border: `1px solid ${alpha(columna.color, 0.3)}`, 
+                borderRadius: '8px !important', 
+                '&:before': { display: 'none' }, mb: 0.5, overflow: 'hidden' 
               }}
             >
-              {actividad.length === 0 && (
-                <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                  Sin actividad registrada aún
-                </Typography>
-              )}
-              {actividad.map((entrada, i) => (
-                <Box key={i} sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
-                  {/* Ícono del tipo */}
-                  <Box sx={{
-                    width: 26, height: 26, borderRadius: '50%', flexShrink: 0, mt: 0.25,
-                    bgcolor: `${colorTipo(entrada.tipo)}18`,
-                    color: colorTipo(entrada.tipo),
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <TipoIcon tipo={entrada.tipo} />
-                  </Box>
-                  {/* Contenido */}
-                  <Box sx={{ flex: 1, minWidth: 0, p: 1.25, bgcolor: 'action.hover', borderRadius: 2, borderTopLeftRadius: 4 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 1 }}>
-                      <Typography variant="caption" fontWeight={700} color="text.primary">
-                        {entrada.autorNombre ?? 'Sistema'}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, fontSize: 10 }}>
-                        {safeDateShort(entrada.fecha)}
-                      </Typography>
-                    </Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5, mt: 0.25 }}>
-                      {entrada.texto}
-                    </Typography>
-                  </Box>
-                </Box>
-              ))}
-              {/* Elemento invisible para asegurar que el scroll baje hasta el final */}
-              <div ref={actividadEndRef} />
-            </Box>
-          </AccordionDetails>
-        </Accordion>
-
-      </Box>
-
-      {/* ── Footer: agregar nota ─────────────────────────── */}
-      <Box sx={{
-        p: 2, borderTop: '1px solid', borderColor: 'divider',
-        bgcolor: 'background.paper',
-      }}>
-        {/* Menú de respuestas rápidas */}
-        <Box sx={{ mb: 1.5 }}>
-          <FormControl fullWidth size="small">
-            <Select
-              displayEmpty
-              value=""
-              onChange={(e) => {
-                if (e.target.value) {
-                  // Concatena el texto si ya había algo escrito
-                  setNota(prev => (prev ? prev + ' ' + e.target.value : e.target.value))
-                }
-              }}
-              sx={{ 
-                height: 36, 
-                fontSize: 13, 
-                bgcolor: 'action.hover', 
-                '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-                '&:hover': { bgcolor: 'action.selected' }
-              }}
-            >
-              <MenuItem value="" disabled>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-                  <ContentPasteIcon fontSize="small" /> 
-                  <Typography variant="body2">Insertar respuesta rápida...</Typography>
-                </Box>
-              </MenuItem>
-              {PLANTILLAS_RESPUESTA.map((texto, i) => (
-                <MenuItem key={i} value={texto} sx={{ fontSize: 13 }}>
-                  {texto}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
-
-        {/* Caja de texto original */}
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
-          <TextField
-            value={nota}
-            onChange={e => setNota(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGuardarNota() } }}
-            placeholder="Escribe una nota o actualización..."
-            multiline
-            maxRows={3}
-            fullWidth
-            size="small"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
-          />
-          <Tooltip title="Enviar nota (Enter)">
-            <span>
-              <IconButton
-                onClick={handleGuardarNota}
-                disabled={!nota.trim() || guardandoNota}
-                sx={{
-                  bgcolor: municipio.brandColor, color: 'white', mb: 0.25,
-                  '&:hover': { bgcolor: municipio.brandColor, filter: 'brightness(1.1)' },
-                  '&:disabled': { bgcolor: 'action.disabled' },
-                }}
+              <AccordionSummary 
+                expandIcon={<ExpandMoreIcon sx={{ color: columna.color }} />} 
+                sx={{ minHeight: 40, bgcolor: alpha(columna.color, 0.05), '& .MuiAccordionSummary-content': { my: 1, alignItems: 'center' } }}
               >
-                {guardandoNota ? <CircularProgress size={18} color="inherit" /> : <SendIcon sx={{ fontSize: 18 }} />}
-              </IconButton>
-            </span>
-          </Tooltip>
-        </Box>
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-          Enter para enviar · Shift+Enter para nueva línea
-        </Typography>
+                <Typography variant="subtitle2" fontWeight={700} sx={{ color: columna.color }}>{area}</Typography>
+                <Chip label={tcks.length} size="small" sx={{ ml: 1, height: 18, fontSize: 10, fontWeight: 700, bgcolor: alpha(columna.color, 0.1), color: columna.color }} />
+              </AccordionSummary>
+              <AccordionDetails sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1.25, bgcolor: alpha(columna.color, 0.02) }}>
+                {tcks.map(r => <TicketCard key={r.id} reporte={r} onClick={() => onTicketClick(r)} />)}
+              </AccordionDetails>
+            </Accordion>
+          ))
+        ) : (
+          // RENDERIZADO NORMAL SIN ACORDEONES
+          tickets.map(r => <TicketCard key={r.id} reporte={r} onClick={() => onTicketClick(r)} />)
+        )}
       </Box>
-    </Drawer>
+    </Box>
+  )
+}
+
+// ── Vista Lista (Tabla Plana) ──────────────────────────────────────────────────
+function VistaLista({ tickets, onTicketClick, loading }) {
+  if (loading) return (
+    <Card variant="outlined" sx={{ borderRadius: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+    </Card>
+  )
+  return (
+    <Card variant="outlined" sx={{ borderRadius: 3, overflow: 'hidden', boxShadow: 'none' }}>
+      <TableContainer sx={{ maxHeight: '70vh' }}>
+        <Table stickyHeader size="small" sx={{ minWidth: 900 }}>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ fontWeight: 800 }}>Folio</TableCell>
+              <TableCell sx={{ fontWeight: 800 }}>Categoría</TableCell>
+              <TableCell sx={{ fontWeight: 800 }}>Prioridad</TableCell>
+              <TableCell sx={{ fontWeight: 800 }}>Estatus</TableCell>
+              <TableCell sx={{ fontWeight: 800 }}>Ubicación</TableCell>
+              <TableCell sx={{ fontWeight: 800 }}>Asignado a</TableCell>
+              <TableCell sx={{ fontWeight: 800 }}>Días abierto</TableCell>
+              <TableCell sx={{ fontWeight: 800 }}>Notas</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {tickets.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} align="center" sx={{ py: 7 }}>
+                  <InboxIcon sx={{ fontSize: 36, color: 'text.disabled', mb: 1 }} />
+                  <Typography color="text.secondary">Sin resultados</Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              tickets.map(r => {
+                const cat = CATEGORIA_MAP[r.categoria]
+                const prio = PRIORIDAD_MAP[r.prioridad]
+                const est = ESTATUS_MAP[r.estatus ?? 'Nuevo']
+                const dias = (() => {
+                  try {
+                    const d = r.fecha instanceof Date ? r.fecha : new Date(r.fecha_iso)
+                    return Math.floor((Date.now() - d.getTime()) / 86400000)
+                  } catch { return '—' }
+                })()
+                const notas = (r.actividad ?? []).filter(a => a.tipo === 'nota').length
+
+                return (
+                  <TableRow key={r.id} hover onClick={() => onTicketClick(r)} sx={{ cursor: 'pointer', '&:last-child td': { borderBottom: 0 } }}>
+                    <TableCell sx={{ fontFamily: 'monospace', fontSize: 11, color: 'text.secondary' }}>{r.folio ?? '—'}</TableCell>
+                    <TableCell><Typography variant="body2">{cat ? `${cat.emoji} ${cat.label}` : r.categoria ?? '—'}</Typography></TableCell>
+                    <TableCell>
+                      {prio ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                          <FlagIcon sx={{ fontSize: 14, color: prio.color }} />
+                          <Typography variant="body2" sx={{ color: prio.color, fontWeight: 700 }}>{prio.label}</Typography>
+                        </Box>
+                      ) : (<Typography variant="body2" color="text.secondary">—</Typography>)}
+                    </TableCell>
+                    <TableCell>
+                      {est ? (
+                        <Chip label={r.estatus ?? 'Nuevo'} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 800, bgcolor: est.bg, color: est.color }} />
+                      ) : (<Typography variant="body2" color="text.secondary">—</Typography>)}
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 180 }}><Typography variant="body2" noWrap title={r.ubicacion}>{r.ubicacion ?? '—'}</Typography></TableCell>
+                    <TableCell><Typography variant="body2" color="text.secondary">{r.asignado_nombre || <em>Sin asignar</em>}</Typography></TableCell>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ color: typeof dias === 'number' && dias > 7 ? 'error.main' : 'text.secondary', fontWeight: typeof dias === 'number' && dias > 7 ? 700 : 400 }}>
+                        {typeof dias === 'number' ? `${dias}d` : dias}
+                      </Typography>
+                    </TableCell>
+                    <TableCell><Typography variant="body2" color="text.secondary">{notas || '—'}</Typography></TableCell>
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Card>
+  )
+}
+
+// ── COMPONENTE PRINCIPAL ───────────────────────────────────────────────────────
+export default function OrdenesTrabajo() {
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+  const { municipio } = useMunicipio()
+  const { user, perfil } = useAuth()
+  
+  const { usuarios } = useUsuarios()
+  const operadores = useMemo(() => {
+    return (usuarios || []).filter(u => ['operador', 'admin'].includes(u.rol) && u.activo !== false)
+  }, [usuarios])
+
+  const currentUserId = user?.uid || perfil?.id || perfil?.uid
+
+  // Estados Locales
+  const [filtroTiempo, setFiltroTiempo] = useState('todos')
+  const [vista, setVista] = useState('kanban')
+  const [filtroAsignado, setFiltroAsignado] = useState('') 
+  const [filtroArea, setFiltroArea] = useState('') 
+  const [busqueda, setBusqueda] = useState('')
+  const [filtroCat, setFiltroCat] = useState('')
+  const [filtroPrio, setFiltroPrio] = useState('')
+  const [reporteActivo, setReporteActivo] = useState(null)
+  const [tabKanban, setTabKanban] = useState(0)
+
+  const [searchParams, setSearchParams] = useSearchParams()
+  const ticketIdUrl = searchParams.get('ticketId')
+
+  const {
+    reportes, loading, error, agregarNota: originalAgregarNota,
+    cambiarEstatus: originalCambiarEstatus, cambiarPrioridad: originalCambiarPrioridad,
+    asignarReporte: originalAsignarReporte,
+  } = useOrdenesTrabajo(filtroTiempo)
+
+  const { crearNotificacion } = useCrearNotificacion()
+
+  // Efectos y Handlers
+  React.useEffect(() => {
+    if (reportes && reportes.length > 0 && ticketIdUrl) {
+      const ticketEncontrado = reportes.find(r => r.id === ticketIdUrl)
+      if (ticketEncontrado) {
+        setReporteActivo(ticketEncontrado)
+        const nuevosParams = new URLSearchParams(searchParams)
+        nuevosParams.delete('ticketId')
+        setSearchParams(nuevosParams, { replace: true })
+      }
+    }
+  }, [reportes, ticketIdUrl, searchParams, setSearchParams])
+
+  const asignarReporte = async (reporteId, nuevoAsignadoId, nombreAsignado) => {
+    await originalAsignarReporte(reporteId, nuevoAsignadoId, nombreAsignado)
+    const reporteActual = reportes.find(r => r.id === reporteId)
+    if (nuevoAsignadoId) {
+      await crearNotificacion({ usuario_destino_id: nuevoAsignadoId, titulo: 'Nuevo ticket asignado', descripcion: `Se te ha asignado el ticket #${reporteActual?.folio || 'sin folio'}.`, tipo: 'info', reporte_id: reporteId })
+    }
+  }
+
+  const cambiarEstatus = async (reporteId, nuevoEstatus) => {
+    await originalCambiarEstatus(reporteId, nuevoEstatus)
+    const reporteActual = reportes.find(r => r.id === reporteId)
+    if (reporteActual?.asignado_a && reporteActual.asignado_a !== currentUserId) {
+      await crearNotificacion({ usuario_destino_id: reporteActual.asignado_a, titulo: 'Estatus actualizado', descripcion: `El ticket #${reporteActual.folio || ''} ahora está "${nuevoEstatus}".`, tipo: nuevoEstatus === 'Resuelto' ? 'success' : 'info', reporte_id: reporteId })
+    }
+  }
+
+  const agregarNota = async (reporteId, notaText) => {
+    await originalAgregarNota(reporteId, notaText)
+    const reporteActual = reportes.find(r => r.id === reporteId)
+    if (reporteActual?.asignado_a && reporteActual.asignado_a !== currentUserId) {
+      await crearNotificacion({ usuario_destino_id: reporteActual.asignado_a, titulo: `Nueva nota en ticket #${reporteActual.folio || ''}`, descripcion: `${perfil?.nombre || 'Alguien'} ha dejado un comentario.`, tipo: 'info', reporte_id: reporteId })
+    }
+  }
+
+  const cambiarPrioridad = async (reporteId, nuevaPrioridad) => {
+    await originalCambiarPrioridad(reporteId, nuevaPrioridad)
+    const reporteActual = reportes.find(r => r.id === reporteId)
+    if (reporteActual?.asignado_a && reporteActual.asignado_a !== currentUserId) {
+      await crearNotificacion({ usuario_destino_id: reporteActual.asignado_a, titulo: 'Cambio de prioridad', descripcion: `El ticket #${reporteActual.folio || ''} cambió a prioridad ${nuevaPrioridad}.`, tipo: 'warning', reporte_id: reporteId })
+    }
+  }
+
+  // 1. Opciones de categoría dinámicas según el área seleccionada
+  const categoriasDropdown = useMemo(() => {
+    if (!filtroArea) return CATEGORIAS
+    return CATEGORIAS.filter(c => c.area === filtroArea)
+  }, [filtroArea])
+
+  // 2. Filtrado Principal de Reportes
+  const reportesFiltrados = useMemo(() => {
+    let r = reportes
+    
+    if (filtroAsignado === 'unassigned') r = r.filter(x => !x.asignado_a || x.asignado_a === '')
+    else if (filtroAsignado) r = r.filter(x => x.asignado_a === filtroAsignado)
+    
+    if (filtroArea) r = r.filter(x => CATEGORIA_MAP[x.categoria]?.area === filtroArea)
+    if (filtroCat) r = r.filter(x => x.categoria === filtroCat)
+    if (filtroPrio) r = r.filter(x => x.prioridad === filtroPrio)
+    if (busqueda) {
+      const q = busqueda.toLowerCase()
+      r = r.filter(x => x.folio?.toLowerCase().includes(q) || x.ubicacion?.toLowerCase().includes(q) || x.categoria?.toLowerCase().includes(q) || x.telefono?.includes(q))
+    }
+    return r
+  }, [reportes, filtroAsignado, filtroArea, filtroCat, filtroPrio, busqueda])
+
+  // 3. Distribución de columnas para el Kanban
+  const porColumna = useMemo(() => {
+    return Object.fromEntries(
+      COLUMNAS_KANBAN.map(col => [
+        col.id,
+        reportesFiltrados.filter(r => col.estatus.includes(r.estatus ?? 'Nuevo')),
+      ])
+    )
+  }, [reportesFiltrados])
+
+  // Métricas Superiores
+  const misAsignados = reportes.filter(r => r.asignado_a === currentUserId && !['Resuelto', 'No aplica', 'Rechazado'].includes(r.estatus ?? 'Nuevo')).length
+  const nuevos = reportes.filter(r => (r.estatus ?? 'Nuevo') === 'Nuevo').length
+  const enProceso = reportes.filter(r => r.estatus === 'En proceso').length
+  const resueltosHoy = reportes.filter(r => {
+    if (r.estatus !== 'Resuelto') return false
+    try {
+      const d = r.fecha_actualizacion?.toDate?.() ?? new Date(r.fecha_actualizacion)
+      return Math.floor((Date.now() - d.getTime()) / 86400000) === 0
+    } catch { return false }
+  }).length
+
+  React.useEffect(() => {
+    if (reporteActivo) {
+      const actualizado = reportes.find(r => r.id === reporteActivo.id)
+      if (actualizado) setReporteActivo(actualizado)
+    }
+  }, [reportes])
+
+  const hayFiltros = busqueda || filtroCat || filtroPrio || filtroAsignado || filtroArea
+
+  return (
+    <Box sx={{ p: { xs: 1.25, sm: 2, md: 3 }, bgcolor: alpha(theme.palette.primary.main, 0.02), minHeight: '100%' }}>
+      {/* HEADER & MINISTATS */}
+      <Box sx={{ mb: 3, p: { xs: 2, md: 2.5 }, borderRadius: 4, bgcolor: 'background.paper', border: `1px solid ${alpha(theme.palette.divider, 0.8)}` }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+          <Box>
+            <Typography variant="h4" fontWeight={900} sx={{ letterSpacing: -0.5 }}>Órdenes de trabajo</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Portal de seguimiento · {municipio.nombre}{perfil?.nombre && ` · ${perfil.nombre}`}</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'center', flexWrap: 'wrap' }}>
+            <FiltroTemporal value={filtroTiempo} onChange={setFiltroTiempo} />
+            <ToggleButtonGroup value={vista} exclusive onChange={(_, v) => v && setVista(v)} size="small" sx={{ bgcolor: 'background.paper', borderRadius: 2.5, '& .MuiToggleButton-root': { border: `1px solid ${alpha(theme.palette.divider, 0.8)}` } }}>
+              <ToggleButton value="kanban"><Tooltip title="Vista kanban"><ViewKanbanIcon sx={{ fontSize: 18 }} /></Tooltip></ToggleButton>
+              <ToggleButton value="lista"><Tooltip title="Vista lista"><ViewListIcon sx={{ fontSize: 18 }} /></Tooltip></ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
+        </Box>
+        <Divider sx={{ my: 2.25 }} />
+        <Stack direction="row" spacing={1.5} sx={{ flexWrap: 'wrap', gap: 1.5 }}>
+          <MiniStat label="Mis asignados" value={misAsignados} color={municipio.brandColor} icon={<AssignmentIcon />} loading={loading} />
+          <MiniStat label="Nuevos" value={nuevos} color="#3B82F6" icon={<NewReleasesIcon />} loading={loading} />
+          <MiniStat label="En proceso" value={enProceso} color="#D97706" icon={<PendingIcon />} loading={loading} />
+          <MiniStat label="Resueltos hoy" value={resueltosHoy} color="#059669" icon={<CheckCircleIcon />} loading={loading} />
+        </Stack>
+      </Box>
+
+      {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 3 }}>Error al cargar los reportes.</Alert>}
+
+      {/* FILTROS */}
+      <Card variant="outlined" sx={{ mb: 2.5, borderRadius: 3, boxShadow: 'none' }}>
+        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <TuneIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+            <Typography variant="subtitle2" fontWeight={800}>Filtros</Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+            <TextField
+              value={busqueda} onChange={e => setBusqueda(e.target.value)}
+              placeholder="Buscar folio o dirección" size="small"
+              sx={{ flex: { xs: '1 1 100%', md: 2 }, minWidth: 200 }}
+              InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon sx={{ fontSize: 17, color: 'text.secondary' }} /></InputAdornment>) }}
+            />
+
+            <FormControl size="small" sx={{ flex: 1, minWidth: 160 }}>
+              <InputLabel>Área o Depto</InputLabel>
+              <Select 
+                value={filtroArea} 
+                onChange={e => {
+                  setFiltroArea(e.target.value)
+                  setFiltroCat('') // Limpia la categoría al cambiar el área
+                }} 
+                label="Área o Depto"
+              >
+                <MenuItem value="">Todas las áreas</MenuItem>
+                {Object.values(AREAS_ADMINISTRACION).map(area => (
+                  <MenuItem key={area} value={area}>{area}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ flex: 1, minWidth: 160 }}>
+              <InputLabel>Categoría</InputLabel>
+              <Select 
+                value={filtroCat} 
+                onChange={e => setFiltroCat(e.target.value)} 
+                label="Categoría"
+                disabled={filtroArea && categoriasDropdown.length === 0}
+              >
+                <MenuItem value="">Todas</MenuItem>
+                {categoriasDropdown.map(c => (
+                  <MenuItem key={c.id} value={c.firestoreValue}>{c.emoji} {c.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ flex: 1, minWidth: 150 }}>
+              <InputLabel>Prioridad</InputLabel>
+              <Select value={filtroPrio} onChange={e => setFiltroPrio(e.target.value)} label="Prioridad">
+                <MenuItem value="">Todas</MenuItem>
+                {PRIORIDADES.map(p => (
+                  <MenuItem key={p.value} value={p.value}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}><FlagIcon sx={{ fontSize: 13, color: p.color }} />{p.label}</Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ flex: 1, minWidth: 160 }}>
+              <InputLabel>Asignado a</InputLabel>
+              <Select value={filtroAsignado} onChange={e => setFiltroAsignado(e.target.value)} label="Asignado a">
+                <MenuItem value="">Todos</MenuItem>
+                <MenuItem value="unassigned"><em>Sin asignar</em></MenuItem>
+                {operadores.map(op => <MenuItem key={op.id} value={op.id}>{op.nombre}</MenuItem>)}
+              </Select>
+            </FormControl>
+
+            <Button
+              size="small" variant={filtroAsignado === currentUserId ? 'contained' : 'outlined'}
+              onClick={() => setFiltroAsignado(filtroAsignado === currentUserId ? '' : currentUserId)}
+              sx={{
+                textTransform: 'none', borderRadius: 2, whiteSpace: 'nowrap', flex: { xs: '1 1 auto', md: 'initial' }, minHeight: 40,
+                ...(filtroAsignado === currentUserId && { bgcolor: municipio.brandColor, '&:hover': { bgcolor: municipio.brandColor, filter: 'brightness(1.08)' } }),
+              }}
+            >
+              Mis asignados
+            </Button>
+
+            {hayFiltros && (
+              <Button size="small" onClick={() => { setBusqueda(''); setFiltroCat(''); setFiltroPrio(''); setFiltroAsignado(''); setFiltroArea('') }} sx={{ textTransform: 'none', color: 'text.secondary', minHeight: 40 }}>Limpiar</Button>
+            )}
+          </Box>
+        </CardContent>
+      </Card>
+
+      {loading && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 2, color: 'text.secondary' }}>
+          <CircularProgress size={18} />
+          <Typography variant="body2">Cargando reportes…</Typography>
+        </Box>
+      )}
+
+      {/* RENDERIZADO DEL KANBAN (Áreas renderizadas DENTRO de las columnas que correspondan) */}
+      {vista === 'kanban' && (
+        <Box>
+          {isMobile && (
+            <Tabs
+              value={tabKanban} onChange={(_, v) => setTabKanban(v)} variant="scrollable" scrollButtons="auto"
+              sx={{ mb: 2, bgcolor: 'background.paper', borderRadius: 2.5, border: `1px solid ${alpha(theme.palette.divider, 0.8)}`, '& .MuiTabs-indicator': { height: 3, borderRadius: 999, bgcolor: COLUMNAS_KANBAN[tabKanban]?.color } }}
+            >
+              {COLUMNAS_KANBAN.map((col, idx) => (
+                <Tab key={col.id} label={`${col.label} (${porColumna[col.id]?.length || 0})`} sx={{ fontSize: 11, fontWeight: 800, textTransform: 'none', color: tabKanban === idx ? col.color : 'text.secondary' }} />
+              ))}
+            </Tabs>
+          )}
+
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', overflowX: isMobile ? 'hidden' : 'auto', pb: 2 }}>
+            {COLUMNAS_KANBAN.map((col, idx) => {
+              if (isMobile && tabKanban !== idx) return null
+              return (
+                <KanbanColumna key={col.id} columna={col} tickets={porColumna[col.id] ?? []} onTicketClick={setReporteActivo} loading={loading} />
+              )
+            })}
+          </Box>
+        </Box>
+      )}
+
+      {/* RENDERIZADO DE LA LISTA (Tabla plana original) */}
+      {vista === 'lista' && (
+        <VistaLista tickets={reportesFiltrados} onTicketClick={setReporteActivo} loading={loading} />
+      )}
+
+      <TicketDetalle
+        reporte={reporteActivo} open={!!reporteActivo} onClose={() => setReporteActivo(null)}
+        onAgregarNota={agregarNota} onCambiarEstatus={cambiarEstatus}
+        onCambiarPrioridad={cambiarPrioridad} onAsignar={asignarReporte}
+      />
+    </Box>
   )
 }
