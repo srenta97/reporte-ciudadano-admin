@@ -491,16 +491,64 @@ export default function NuevoReporte() {
                 </Box>
 
                 {subtiposDisponibles.length > 0 && (
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Tipo de problema específico</InputLabel>
-                    <Select value={subtipo} onChange={e => setSubtipo(e.target.value)}
-                      label="Tipo de problema específico">
-                      <MenuItem value=""><em>General / No especificado</em></MenuItem>
+                  <Box sx={{ mt: 3, pt: 3, borderTop: '1px dashed', borderColor: 'divider' }}>
+                    <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
+                      ¿Qué tipo de problema específico es?
+                    </Typography>
+                    
+                    <Box sx={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                      gap: 1,
+                    }}>
+                      {/* Tile de opción General */}
+                      <Box
+                        onClick={() => setSubtipo('')}
+                        sx={{
+                          p: 1.5, borderRadius: 2, cursor: 'pointer',
+                          border: '1.5px solid',
+                          borderColor: subtipo === '' ? subtipoCat.color : 'divider',
+                          bgcolor: subtipo === '' ? `${subtipoCat.color}12` : 'background.paper',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+                          transition: 'all 0.12s',
+                          '&:hover': {
+                            borderColor: subtipoCat.color,
+                            bgcolor: `${subtipoCat.color}08`,
+                          },
+                        }}
+                      >
+                        <Typography variant="caption" fontWeight={subtipo === '' ? 700 : 500}
+                          sx={{ color: subtipo === '' ? subtipoCat.color : 'text.secondary', lineHeight: 1.2 }}>
+                          General / No especificado
+                        </Typography>
+                      </Box>
+
+                      {/* Tiles de los subtipos específicos */}
                       {subtiposDisponibles.map(s => (
-                        <MenuItem key={s} value={s}>{s}</MenuItem>
+                        <Box
+                          key={s}
+                          onClick={() => setSubtipo(s)}
+                          sx={{
+                            p: 1.5, borderRadius: 2, cursor: 'pointer',
+                            border: '1.5px solid',
+                            borderColor: subtipo === s ? subtipoCat.color : 'divider',
+                            bgcolor: subtipo === s ? `${subtipoCat.color}12` : 'background.paper',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+                            transition: 'all 0.12s',
+                            '&:hover': {
+                              borderColor: subtipoCat.color,
+                              bgcolor: `${subtipoCat.color}08`,
+                            },
+                          }}
+                        >
+                          <Typography variant="caption" fontWeight={subtipo === s ? 700 : 500}
+                            sx={{ color: subtipo === s ? subtipoCat.color : 'text.primary', lineHeight: 1.2 }}>
+                            {s}
+                          </Typography>
+                        </Box>
                       ))}
-                    </Select>
-                  </FormControl>
+                    </Box>
+                  </Box>
                 )}
               </CardContent>
             </Card>
