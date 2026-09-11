@@ -239,7 +239,7 @@ export default function Mapa() {
                     que hace resaltar mucho más tus puntos de calor y marcadores. */}
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                  url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                  url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=cb1_3gio_1_24b05530968dfd66167515fb"
                 />
 
                 {/* Vista de Marcadores (Condicional) */}

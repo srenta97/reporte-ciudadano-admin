@@ -73,7 +73,7 @@ function MapaSelector({ lat, lon, onChange, centro }) {
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?key=cb1_3gio_1_24b05530968dfd66167515fb"
         />
         <ChangeMapView lat={lat} lon={lon} />
         <ClickHandler />
