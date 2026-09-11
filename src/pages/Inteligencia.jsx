@@ -388,7 +388,7 @@ export default function Inteligencia() {
                 >
                   <TileLayer
                     attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
-                    url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                    url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=cb1_3gio_1_24b05530968dfd66167515fb"
                   />
 
                   {zonas.map(zona => {
